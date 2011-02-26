@@ -73,6 +73,7 @@ $(document).ready(function () {
 
     } else {
       console.log("GOT WS MSG: " + event.data);
+      $(doodle.noticeID).prepend("<li>GOT: " + event.data + "</li>");
     }};
     socket.onclose = function(event) { alert('closed' + event); }
     socket.onerror = function(event) { alert('error' + event); }
@@ -82,12 +83,14 @@ $(document).ready(function () {
 var doodle = {
     // Define some variables
     'drawing':          false,
-    'linethickness':    1,
+    'linethickness':    2,
     'updating':         false,
     'saveID':           '#save',
     'newID':            '#new',
     'penID':            '#pen',
     'eraserID':         '#eraser',
+    'voteSkipID':       '#voteskip',
+    'guessboxID':       '#guessbox',
     'noticeID':         '#notification',
     'loaded_id':         false,
     'lineSegs':          []
@@ -127,9 +130,9 @@ doodle.init = function(givenSocket) {
     
     // Add Pen selection event
     $(doodle.penID).bind('click', doodle.pen);
-    $(doodle.eraserID).bind('click', doodle.eraser);
-    
-    
+    // $(doodle.eraserID).bind('click', doodle.eraser);
+    $(doodle.voteSkipID).bind('click', doodle.voteSkip);
+    $(doodle.guessboxID).bind('keyup', doodle.guessboxKeyup);
 };
 
 doodle.loadDoodles = function(cookie) {
@@ -241,7 +244,7 @@ doodle.clearCanvas = function(ev) {
     
     // Set the background to white.
     // then reset the fill style back to black
-    doodle.context.fillStyle = '#FFFFFF';
+    doodle.context.fillStyle = '#f4f4f4';
     doodle.context.fillRect(0, 0, doodle.canvas.width, doodle.canvas.height);
     doodle.context.fillStyle = '#000000';
     
@@ -336,5 +339,25 @@ doodle.eraser = function() {
     
     // Remove active state from pen
     $(doodle.penID).removeClass('active');
+}
+
+doodle.voteSkip = function() {
+  doodle.socket.send("VOTESKIP");
+}
+
+doodle.submitGuess = function(text) {
+  console.log("FAKE: would submit guess " + text);
+  doodle.socket.send("GUESS: "+text);
+}
+
+doodle.guessboxKeyup = function(e) {
+  switch(e.keyCode) {
+      case 9: //Event.KEY_TAB:
+      case 13: //Event.KEY_RETURN:
+        gb = $(doodle.guessboxID);
+        doodle.submitGuess(gb.val());
+        gb.val("");
+        break;
+  }
 }
 

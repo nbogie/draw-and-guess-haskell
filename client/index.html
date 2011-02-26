@@ -1,76 +1,67 @@
 ﻿<!DOCTYPE html>
 <html lang="en-GB">
-	<head>
-	
+  <head>
+
     <title>Draw and Guess</title>
-	
     <!-- Meta Tags -->
     <meta http-equiv="content-type" content="application/xhtml+xml; charset=utf-8" />
-
     <!-- Fav icon -->
     <link rel="shortcut icon" href="" />
+  </head>
 
-	</head>
   <body>
-		<div id="container"> <!-- container. start -->
-            <h1>Draw and Guess</h1>
-                    
-            <div id="column1">
-                <div id="canvas_wrapper">
-                    <canvas width="640" height="480" id="doodle_canvas">
-                        <div id="no_doodle_canvas">
-                            <code>canvas</code> element not supported.
-                        </div>
-                    </canvas>
-                </div>
-                
-                <div id="controls">
-                    <div id="save">
-                        Save
-                    </div>
-                    <div id="new">
-                        New
-                    </div>
-                    <div id="pen" class="active">
-                        Pen
-                    </div>
-                    <div id="eraser">
-                        Eraser
-                    </div>
-                </div>
-                
-            </div>
-            
-            
-            <div id="column2">
-                <div id="instructions">
-                    <h2>Instructions</h2>
-                    <p>Click &amp; doodle inside the box to create your own tiny doodle.</p>
-                </div>
-                
-            </div>
-            
-            <div id="notification">
-            </div>
-            
-             <div id="output">
-                <h2>Saved Images</h2>
-            </div>
-            
-            <div id="credits">
-                <p>
-                    Client interface adapted from TinyDoodle by <a href="http://coderonfire.com/">Andrew Mason</a>.
-                </p>
-            </div>
-		</div><!-- container. end -->
-		
-		<!-- JavaScript  -->
-        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js"></script>
-        <script type="text/javascript" src="static/js/doodle.js"></script>
-        <script type="text/javascript">
-            $(document).ready(function () {
+    <div id="container"> <!-- container. start -->
+      <h5>Draw and Guess</h5>
+      <div id="column1">
+        <div id="canvas_wrapper">
+          <canvas width="640" height="150" id="doodle_canvas">
+          <div id="no_doodle_canvas">
+            <code>canvas</code> element not supported.
+          </div>
+          </canvas>
+        </div>
+        <div id="controls">
+          <div id="save">
+            Save
+          </div>
+          <div id="new">
+            New
+          </div>
+          <div id="pen" class="active">
+            Pen
+          </div>
+          <div id="voteskip">
+            Vote to skip
+          </div>
+        </div>
+      </div>
+
+
+      <div id="column2">
+        <!-- keep a submit button around for touchscreens -->
+        <div id="guessform">
+          <input id='guessbox' type="text"/>
+          <input type="button" value="guess"/>
+        </div>
+
+        notification area here
+        <ul id="notification">
+        </ul>
+
+        <div id="credits">
+          <p>
+          Client interface adapted from TinyDoodle by <a href="http://coderonfire.com/">Andrew Mason</a>.
+          </p>
+        </div>
+      </div><!-- container. end -->
+
+      <!-- JavaScript  -->
+      <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js"></script>
+      <script type="text/javascript" src="static/js/doodle.js"></script>
+      <script type="text/javascript">
+        $(document).ready(function () {
             });
-        </script>
-                
-	</body>
+</script>
+
+  </body>
 </html>
