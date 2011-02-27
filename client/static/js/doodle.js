@@ -58,7 +58,7 @@ $(document).ready(function () {
     doodle.init(socket);
 
     socket.onopen = function(event) {
-      socket.send('Hello');
+      socket.send('ClientHello');
     };
     socket.onmessage = function(event) { 
     if ((/ DRAW /).test(event.data )) { //TODO: tighten format
@@ -352,7 +352,6 @@ doodle.submitGuess = function(text) {
 
 doodle.guessboxKeyup = function(e) {
   switch(e.keyCode) {
-      case 9: //Event.KEY_TAB:
       case 13: //Event.KEY_RETURN:
         gb = $(doodle.guessboxID);
         doodle.submitGuess(gb.val());

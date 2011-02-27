@@ -1,0 +1,1 @@
+when you reload the page in a client, it joins a second time, and the original socket seems to remain open at least for receiving messages.

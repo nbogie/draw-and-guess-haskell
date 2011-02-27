@@ -33,21 +33,19 @@ welcome :: Handle -> Chan Event -> IO ()
 welcome h channel = do
   request <- shakeHands h
   case request of
-    Left err -> print err
+    Left err -> print $ "ERR: " ++ show err
     Right  _ -> do
       writeChan channel $ Join h (User "unknown")
-      putFrame h (BU.fromString "hello")
+      putFrame h (BU.fromString ("hello you are handle "++show h))
       putStrLn $ "Shook hands with "++show h ++" sent welcome message."
       talkLoop h channel
-
-data HU = HU Handle (Maybe User) deriving (Eq, Show)
 
 dispatcher :: Chan Event -> [Handle] -> IO ()
 dispatcher channel handles = do
   ev <- readChan channel 
   case ev of
     Join h (User uname) -> do
-      putStrLn "DISP: Join Event"
+      putStrLn $ "DISP: Join Event.  Handle: "++ show h
       let newHandles = h:handles
       broadcast newHandles $ show ["Joined: ", show h, uname]
       dispatcher channel newHandles
