@@ -28,7 +28,7 @@ data Event = Join Handle User
              | Leave Handle User
              deriving (Eq, Show)
 
-data Team = Team [Handle] deriving (Show, Eq)
+type Team = [Handle]
 data Role = Artist | Guesser deriving (Show, Eq)
 --
 -- Shakes hands with client. If no error, starts talking.
@@ -43,25 +43,52 @@ welcome h channel = do
       putStrLn $ "Shook hands with "++show h ++" sent welcome message."
       talkLoop h channel
 
-data GameState = GameState { team1::Team, team2::Team } deriving (Show)
+data GameState = GameState { teams::Teams} deriving (Show)
+data Teams = Teams {team1::Team, team2::Team} deriving (Show)
 
 initGameState :: GameState
-initGameState = GameState { team1 = Team [], team2 = Team []}
+initGameState = GameState { teams = Teams {team1 = [], team2 = []}}
+
+addToTeams :: Teams -> Handle -> IO Teams
+addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = do
+  print $ length t1
+  print $ length t2
+  if length t1 < length t2 
+    then return $  nowTeams { team1 = h:t1}
+    else return $ nowTeams { team2 = h:t2}
+
+removeFromTeams :: Teams -> Handle -> Teams
+removeFromTeams teams@(Teams {team1=t1, team2=t2}) h = 
+  let t1' = delete h t1
+      t2' = delete h t2
+  in Teams { team1 = t1', team2 = t2' }
 
 dispatcher :: Chan Event -> [Handle] -> GameState -> IO ()
 dispatcher channel handles gameState = do
   ev <- readChan channel 
   case ev of
     Join h (User uname) -> do
-      putStrLn $ "DISP: Join Event.  Handle: "++ show h
-      let newHandles = h:handles
-      broadcast newHandles $ show ["Joined: ", show h, uname]
-      dispatcher channel newHandles gameState
+      if h `elem` handles -- ignore this re-join from same handle, or better still, drop the handle.
+        then
+          do putStrLn "ignoring join because handle contains already"
+             dispatcher channel handles gameState
+        else do
+          let newHandles = h:handles
+          putStrLn $ "DISP: Join Event.  Handle: "++ show h
+          let nowTeams = teams gameState
+          newTeams <- addToTeams (teams gameState) h
+          let gs' = gameState {teams = newTeams} 
+          putStrLn $ "New Teams: " ++ show newTeams
+          broadcast newHandles $ show ["Joined: ", show h, uname]
+          broadcast newHandles $ teamsMessage newTeams
+          dispatcher channel newHandles gs'
     Leave h (User uname) -> do
       putStrLn "DISP: Leave Event"
       let newHandles = delete h handles
+      let newTeams = removeFromTeams (teams gameState) h
+      let gs' = gameState { teams = newTeams } 
       broadcast newHandles "left"
-      dispatcher channel newHandles gameState
+      dispatcher channel newHandles gs'
     SetNick h (User uname) -> do
       putStrLn $ "DISP: User " ++ uname ++ " set nick"
       broadcast handles $ "NICK SET: " ++ uname
@@ -72,7 +99,11 @@ dispatcher channel handles gameState = do
       dispatcher channel handles gameState
 
 broadcast :: [Handle] -> String -> IO ()
-broadcast handles msg = mapM_ (\h -> putFrame h (BU.fromString msg)) handles -- TODO: handle case that the handle is closed (putFrame to a closed handle will kill the thread).
+-- TODO: handle case that the handle is closed (putFrame to a closed handle will kill the thread).
+broadcast handles msg = mapM_ (\h -> putFrame h (BU.fromString msg)) handles 
+
+teamsMessage :: Teams -> String
+teamsMessage teams = "TEAMS "++ show teams
 
 -- Talks to the client (by echoing messages back) until EOF.
 talkLoop :: Handle -> Chan Event -> IO ()
@@ -82,15 +113,16 @@ talkLoop h channel = do
     then do
       putStrLn "EOF encountered. Closing handle."
       hClose h
+      writeChan channel $ Leave h (User "foo") 
     else do
       let msg = BU.toString msgB -- TODO: by going via String we'll unfortunately kill any invalid chars, where we'd prefer to leave the msg untouched.
       putStrLn $ "client handler: got message " ++ msg
       
-      let ev = case isPrefixOf "nick=" msg of
-                 True -> SetNick h (User msg) 
-                 _    -> Message h (User "unknownx") msg
+      let ev = if "nick=" `isPrefixOf` msg
+                 then SetNick h (User msg) 
+                 else Message h (User "unknownx") msg
       putStrLn $ "type of event: " ++ show ev
-      writeChan channel $ ev
+      writeChan channel ev
       putFrame h $ BU.fromString "ok"
       talkLoop h channel
 
