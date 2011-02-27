@@ -14,7 +14,7 @@ import Data.List (delete, intercalate, isPrefixOf)
 main :: IO ()
 main = withSocketsDo $ do
   channel <- newChan
-  forkIO $ dispatcher channel []
+  forkIO $ dispatcher channel [] initGameState
   socket <- listenOn (PortNumber 12345)
   putStrLn "Listening on port 12345."
   forever $ do
@@ -28,6 +28,9 @@ data Event = Join Handle User
              | Leave Handle User
              deriving (Eq, Show)
 
+data Team = Team [Handle] deriving (Show, Eq)
+data Role = Artist | Guesser deriving (Show, Eq)
+--
 -- Shakes hands with client. If no error, starts talking.
 welcome :: Handle -> Chan Event -> IO ()
 welcome h channel = do
@@ -40,28 +43,33 @@ welcome h channel = do
       putStrLn $ "Shook hands with "++show h ++" sent welcome message."
       talkLoop h channel
 
-dispatcher :: Chan Event -> [Handle] -> IO ()
-dispatcher channel handles = do
+data GameState = GameState { team1::Team, team2::Team } deriving (Show)
+
+initGameState :: GameState
+initGameState = GameState { team1 = Team [], team2 = Team []}
+
+dispatcher :: Chan Event -> [Handle] -> GameState -> IO ()
+dispatcher channel handles gameState = do
   ev <- readChan channel 
   case ev of
     Join h (User uname) -> do
       putStrLn $ "DISP: Join Event.  Handle: "++ show h
       let newHandles = h:handles
       broadcast newHandles $ show ["Joined: ", show h, uname]
-      dispatcher channel newHandles
+      dispatcher channel newHandles gameState
     Leave h (User uname) -> do
       putStrLn "DISP: Leave Event"
       let newHandles = delete h handles
       broadcast newHandles "left"
-      dispatcher channel newHandles
+      dispatcher channel newHandles gameState
     SetNick h (User uname) -> do
       putStrLn $ "DISP: User " ++ uname ++ " set nick"
       broadcast handles $ "NICK SET: " ++ uname
-      dispatcher channel handles
+      dispatcher channel handles gameState
     Message h (User uname) msg -> do
       putStrLn $ "DISP: User " ++ uname ++ " got message: " ++ msg ++ " from " ++ show h 
       broadcast handles $ uname ++ ": " ++ msg
-      dispatcher channel handles
+      dispatcher channel handles gameState
 
 broadcast :: [Handle] -> String -> IO ()
 broadcast handles msg = mapM_ (\h -> putFrame h (BU.fromString msg)) handles -- TODO: handle case that the handle is closed (putFrame to a closed handle will kill the thread).
