@@ -8,7 +8,7 @@ import Control.Concurrent (forkIO, threadDelay)
 
 import Control.Concurrent.Chan
 
-import Data.List (delete, intercalate, isPrefixOf)
+import Data.List (delete, intercalate, isPrefixOf, isInfixOf)
 
 -- Accepts clients, spawns a single handler for each one.
 main :: IO ()
@@ -26,6 +26,7 @@ data Event = Join Handle User
              | SetNick Handle User
              | Message Handle User String
              | Leave Handle User
+             | RoundStart
              deriving (Eq, Show)
 
 type Team = [Handle]
@@ -54,8 +55,8 @@ addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = do
   print $ length t1
   print $ length t2
   if length t1 < length t2 
-    then return $  nowTeams { team1 = h:t1}
-    else return $ nowTeams { team2 = h:t2}
+    then return $ nowTeams { team1 = h:t1 }
+    else return $ nowTeams { team2 = h:t2 }
 
 removeFromTeams :: Teams -> Handle -> Teams
 removeFromTeams teams@(Teams {team1=t1, team2=t2}) h = 
@@ -66,6 +67,7 @@ removeFromTeams teams@(Teams {team1=t1, team2=t2}) h =
 dispatcher :: Chan Event -> [Handle] -> GameState -> IO ()
 dispatcher channel handles gameState = do
   ev <- readChan channel 
+  putStrLn $ "DISPATCHER readChan: " ++ show ev
   case ev of
     Join h (User uname) -> do
       if h `elem` handles -- ignore this re-join from same handle, or better still, drop the handle.
@@ -96,8 +98,13 @@ dispatcher channel handles gameState = do
     Message h (User uname) msg -> do
       putStrLn $ "DISP: User " ++ uname ++ " got message: " ++ msg ++ " from " ++ show h 
       broadcast handles $ uname ++ ": " ++ msg
+      if (isInfixOf "xyzzy" msg) then (writeChan channel RoundStart) else return ()
       dispatcher channel handles gameState
-
+    RoundStart -> do
+      broadcast handles $ "ROUNDSTART"
+    -- TODO: how to put in a catch all that doesn't cause ghc to complain about overlapped matches?
+      dispatcher channel handles gameState
+    
 broadcast :: [Handle] -> String -> IO ()
 -- TODO: handle case that the handle is closed (putFrame to a closed handle will kill the thread).
 broadcast handles msg = mapM_ (\h -> putFrame h (BU.fromString msg)) handles 

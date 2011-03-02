@@ -68,9 +68,12 @@ $(document).ready(function () {
       var y0 = parseInt(parts[3]);
       var x1 = parseInt(parts[4]);
       var y1 = parseInt(parts[5]);
+      doodle.setRemotePen();
       doodle.drawfromto(x0, y0, x1, y1);
+    } else if ("ROUNDSTART" == event.data ) {
+      console.log("Round starts!");
+      doodle.newDoodle();
     } else if ("ok" == event.data ) {
-
     } else {
       console.log("GOT WS MSG: " + event.data);
       $(doodle.noticeID).prepend("<li>GOT: " + event.data + "</li>");
@@ -88,7 +91,6 @@ var doodle = {
     'saveID':           '#save',
     'newID':            '#new',
     'penID':            '#pen',
-    'eraserID':         '#eraser',
     'voteSkipID':       '#voteskip',
     'guessboxID':       '#guessbox',
     'noticeID':         '#notification',
@@ -130,7 +132,6 @@ doodle.init = function(givenSocket) {
     
     // Add Pen selection event
     $(doodle.penID).bind('click', doodle.pen);
-    // $(doodle.eraserID).bind('click', doodle.eraser);
     $(doodle.voteSkipID).bind('click', doodle.voteSkip);
     $(doodle.guessboxID).bind('keyup', doodle.guessboxKeyup);
 };
@@ -260,6 +261,10 @@ doodle.clearCanvas = function(ev) {
     doodle.updating = false;
 }
 
+doodle.sendLineSeg = function(x0, y0, x1, y1) {
+  doodle.socket.send("DRAW "+x0 + " "+y0+" "+x1+" "+y1);
+}
+
 doodle.drawStart = function(ev) {
     ev.preventDefault();
     // Calculate the current mouse X, Y coordinates with canvas offset
@@ -274,17 +279,6 @@ doodle.drawStart = function(ev) {
     doodle.oldY = y;
 }
 
-doodle.sendLineSeg = function(x0, y0, x1, y1) {
-  doodle.socket.send("DRAW "+x0 + " "+y0+" "+x1+" "+y1);
-}
-doodle.drawfromto = function(x0, y0, x1, y1) {
-    doodle.context.beginPath();
-    doodle.context.moveTo(x0, y0);
-    doodle.context.lineTo(x1, y1);
-    doodle.context.closePath();
-    doodle.context.stroke();
-}
-
 doodle.draw = function(ev) {
     // Calculate the current mouse X, Y coordinates with canvas offset
     var x, y;
@@ -293,6 +287,7 @@ doodle.draw = function(ev) {
     
     // If the mouse is down (drawning) then start drawing lines
     if(doodle.drawing) {
+      doodle.setLocalPen();
       doodle.drawfromto(doodle.oldX, doodle.oldY, x,y);
       doodle.sendLineSeg(doodle.oldX, doodle.oldY, x, y);
     }
@@ -307,6 +302,23 @@ doodle.drawEnd = function(ev) {
     doodle.drawing = false;
 }
 
+doodle.drawfromto = function(x0, y0, x1, y1) {
+    doodle.context.beginPath();
+    doodle.context.moveTo(x0, y0);
+    doodle.context.lineTo(x1, y1);
+    doodle.context.closePath();
+    doodle.context.stroke();
+}
+
+doodle.setLocalPen = function() {
+    doodle.context.strokeStyle = '#000000';
+    doodle.linethickness = 2;
+}
+doodle.setRemotePen = function() {
+    doodle.context.strokeStyle = '#404040';
+    doodle.linethickness = 5;
+}
+
 // Set the drawing method to pen
 doodle.pen = function() {
     // Check if pen is already selected
@@ -319,26 +331,6 @@ doodle.pen = function() {
     
     // Flag that pen is now active
     $(doodle.penID).toggleClass('active');
-    
-    // Remove active state from eraser
-    $(doodle.eraserID).removeClass('active');
-}
-
-// Set the drawing method to eraser
-doodle.eraser = function() {
-    // Check if pen is already selected
-    if($(doodle.eraserID).hasClass('active')) {
-        return;
-    }
-    // Change color and thickness of the line
-    doodle.context.strokeStyle = '#FFFFFF';
-    doodle.linethickness = 7;
-    
-    // Flag that eraser is now active
-    $(doodle.eraserID).toggleClass('active');
-    
-    // Remove active state from pen
-    $(doodle.penID).removeClass('active');
 }
 
 doodle.voteSkip = function() {

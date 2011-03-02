@@ -1,1 +1,4 @@
 when you reload the page in a client, it joins a second time, and the original socket seems to remain open at least for receiving messages.
+
+It's easy when adding a new type of message for the dispatcher to handle to forget to call dispatcher loop again.  Better if all the dispatcher did was dispatch to a function to modify the gamestate (and the handles (not currently in the game state)), then the re-invocation of dispatcher would happen once only (i.e. abstract out the recursion/looping).
+
