@@ -60,10 +60,11 @@ $(document).ready(function () {
     socket.onopen = function(event) {
       socket.send('ClientHello');
     };
+
     socket.onmessage = function(event) { 
     if ((/ DRAW /).test(event.data )) { //TODO: tighten format
     parts = event.data.split(" ");
-      console.log("GOT DRAW: " + event.data);
+      //console.log("GOT DRAW: " + event.data);
       var x0 = parseInt(parts[2]);
       var y0 = parseInt(parts[3]);
       var x1 = parseInt(parts[4]);
@@ -78,8 +79,10 @@ $(document).ready(function () {
       console.log("GOT WS MSG: " + event.data);
       $(doodle.noticeID).prepend("<li>GOT: " + event.data + "</li>");
     }};
-    socket.onclose = function(event) { alert('closed' + event); }
-    socket.onerror = function(event) { alert('error' + event); }
+
+    socket.onclose = function(event) { alert('The websocket to the game server is closed.'); }
+
+    socket.onerror = function(event) { alert('An error occurred with the game websocket: ' + event + " Data: " + event.data); }
 
 });
 
