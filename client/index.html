@@ -1,63 +1,87 @@
-﻿<!DOCTYPE html>
-<html lang="en-GB">
+<!DOCTYPE html>
+<html lang="en">
   <head>
 
     <title>Draw and Guess</title>
     <!-- Meta Tags -->
     <meta http-equiv="content-type" content="application/xhtml+xml; charset=utf-8" />
+
+    <link rel="stylesheet" href="reset.css" type="text/css"  />
+    <link rel="stylesheet" href="general.css" type="text/css"  />
     <!-- Fav icon -->
     <link rel="shortcut icon" href="" />
+
   </head>
 
   <body>
-    <div id="container"> <!-- container. start -->
-      <h5>Draw and Guess</h5>
-      <div id="column1">
-        <div id="canvas_wrapper">
-          <canvas width="640" height="150" id="doodle_canvas">
-          <div id="no_doodle_canvas">
-            <code>canvas</code> element not supported.
-          </div>
-          </canvas>
-        </div>
-        <div id="controls">
-          <div id="save">
-            Save
-          </div>
-          <div id="new">
-            New
-          </div>
-          <div id="pen" class="active">
-            Pen
-          </div>
-          <div id="voteskip">
-            Vote to skip
-          </div>
-        </div>
-      </div>
-     
+    <div id="outerwrapper">
 
-      <div id="column2">
-        <!-- keep a submit button around for touchscreens -->
-        <div id="guessform">
-          <input id='guessbox' type="text"/>
-          <input type="button" value="guess"/>
+
+      <div class="row">
+        <div class="col col_12">
+          <div class="contentboxes">
+            <h1>Hacktionary</h1>
+            <div id="canvas_wrapper">
+              <canvas width="640" height="150" id="doodle_canvas">
+              <div id="no_doodle_canvas">
+                <code>canvas</code> element not supported.
+              </div>
+              </canvas>
+            </div>
+            <div id="voteskip">
+              Vote to skip
+            </div>
+
+            <div id="column2">
+              <!-- keep a submit button around for touchscreens -->
+              <div id="guessform">
+                <input id='guessbox' type="text"/>
+                <input type="button" value="guess"/>
+              </div>
+              notification area here
+              <ul id="notification">
+              </ul>
+
+            </div>
+          </div>
+
+
+          <div class="contentboxes">
+            <div id="credits">
+              <h2>Credits</h2>
+              <ul>
+                <li> Client interface adapted from TinyDoodle by <a href="http://coderonfire.com/">Andrew Mason</a>.  </li>
+                <li>Layout based on one from from original <a href="http://freehtml5templates.com">Free HTML5 Templates</a></li>
+              </ul>
+            </div>
+          </div>
+
+
         </div>
 
-        <div id="teams">
-          Teams display goes here.
+        <div class="col col_4">
+          <div class="menuboxes">
+            <span id="scoreboard-title">Scores</span>
+            <div>
+              <div class="team-title">Blue Team: 2</div>
+              <ul>
+                <li>Alan</li>
+                <li>Billy</li>
+              </ul>
+              <div class="team-title">Red Team: 5</div>
+              <ul>
+                <li>Marsellus</li>
+                <li>Simon</li>
+                <li>Duncan</li>
+              </ul>
+            </div>
+          </div>
         </div>
 
-        notification area here
-        <ul id="notification">
-        </ul>
 
-        <div id="credits">
-          <p>
-          Client interface adapted from TinyDoodle by <a href="http://coderonfire.com/">Andrew Mason</a>.
-          </p>
-        </div>
-      </div><!-- container. end -->
+      </div><!-- end outerwrapper -->
+      <!-- Free template created for and provided by http://freehtml5templates.com thanks to designer Pam Atkins-->
+
 
       <!-- JavaScript  -->
       <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js"></script>
@@ -66,6 +90,5 @@
         $(document).ready(function () {
             });
 </script>
-
-  </body>
+</body>
 </html>

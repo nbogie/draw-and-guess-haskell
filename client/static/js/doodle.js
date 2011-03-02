@@ -109,13 +109,6 @@ doodle.init = function(givenSocket) {
     
     doodle.newDoodle();
     
-    $('#share div').hide();    
-    // Set up the share links
-    $('#share h2').bind('click', function() {
-        $('#share div').slideToggle('normal');
-    });
-
-    
     // Mouse based interface
     $(doodle.canvas).bind('mousedown', doodle.drawStart);
     $(doodle.canvas).bind('mousemove', doodle.draw);
@@ -248,8 +241,11 @@ doodle.clearCanvas = function(ev) {
     
     // Set the background to white.
     // then reset the fill style back to black
-    doodle.context.fillStyle = '#f4f4f4';
+  
+    doodle.context.fillStyle = '#000000';
     doodle.context.fillRect(0, 0, doodle.canvas.width, doodle.canvas.height);
+    doodle.context.fillStyle = '#D9D4B7';
+    doodle.context.fillRect(1, 1, doodle.canvas.width-2, doodle.canvas.height-2);
     doodle.context.fillStyle = '#000000';
     
     // Remove active class from other thumbs
