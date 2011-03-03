@@ -1,3 +1,5 @@
+module Main where
+
 import Network.WebSockets (shakeHands, getFrame, putFrame)
 import Network (listenOn, PortID(PortNumber), accept, withSocketsDo)
 import System.IO (Handle, hClose)
@@ -9,6 +11,9 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Chan
 
 import Data.List (delete, intercalate, isPrefixOf, isInfixOf)
+
+import Types
+import Messages
 
 -- Accepts clients, spawns a single handler for each one.
 main :: IO ()
@@ -29,7 +34,6 @@ data Event = Join Handle User
              | RoundStart
              deriving (Eq, Show)
 
-type Team = [Handle]
 data Role = Artist | Guesser deriving (Show, Eq)
 --
 -- Shakes hands with client. If no error, starts talking.
@@ -45,7 +49,6 @@ welcome h channel = do
       talkLoop h channel
 
 data GameState = GameState { teams::Teams} deriving (Show)
-data Teams = Teams {team1::Team, team2::Team} deriving (Show)
 
 initGameState :: GameState
 initGameState = GameState { teams = Teams {team1 = [], team2 = []}}
@@ -82,7 +85,8 @@ dispatcher channel handles gameState = do
           let gs' = gameState {teams = newTeams} 
           putStrLn $ "New Teams: " ++ show newTeams
           broadcast newHandles $ show ["Joined: ", show h, uname]
-          broadcast newHandles $ teamsMessage newTeams
+          putStrLn $ "Will broadcast " ++ (teamsMsgToJSON newTeams)
+          broadcast newHandles $ teamsMsgToJSON newTeams
           dispatcher channel newHandles gs'
     Leave h (User uname) -> do
       putStrLn "DISP: Leave Event"
@@ -110,7 +114,7 @@ broadcast :: [Handle] -> String -> IO ()
 broadcast handles msg = mapM_ (\h -> putFrame h (BU.fromString msg)) handles 
 
 teamsMessage :: Teams -> String
-teamsMessage teams = "TEAMS "++ show teams
+teamsMessage teams = teamsMsgToJSON teams
 
 -- Talks to the client (by echoing messages back) until EOF.
 talkLoop :: Handle -> Chan Event -> IO ()
