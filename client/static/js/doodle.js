@@ -63,7 +63,7 @@ $(document).ready(function () {
 
     socket.onmessage = function(event) { 
     if ((/ DRAW /).test(event.data )) { //TODO: tighten format
-    parts = event.data.split(" ");
+      parts = event.data.split(" ");
       //console.log("GOT DRAW: " + event.data);
       var x0 = parseInt(parts[2]);
       var y0 = parseInt(parts[3]);
@@ -71,6 +71,12 @@ $(document).ready(function () {
       var y1 = parseInt(parts[5]);
       doodle.setRemotePen();
       doodle.drawfromto(x0, y0, x1, y1);
+    } else if ((/\{\"mteams\"/).test(event.data)) {
+        console.log("updating teams with: " + event.data);
+        updateTeams(JSON.parse(event.data));//TODO: security.  only parse what you trust 100%
+        parts = event.data.split(" ");
+        //console.log("GOT DRAW: " + event.data);
+        var x0 = parseInt(parts[2]);
     } else if ("ROUNDSTART" == event.data ) {
       console.log("Round starts!");
       doodle.newDoodle();
@@ -85,6 +91,20 @@ $(document).ready(function () {
     socket.onerror = function(event) { alert('An error occurred with the game websocket: ' + event + " Data: " + event.data); }
 
 });
+
+updateTeams = function(teamsData) {
+  $('#team0list').empty();
+  $('#team1list').empty();
+  for (var tix = 0; tix < teamsData.mteams.length; tix++) {
+    var t = teamsData.mteams[tix];
+    console.log("TEAM " + t.teamId);
+    for (var pix = 0; pix < t.members.length; pix++) {
+      var p = t.members[pix];
+      console.log("member:  " + p);
+      $('#team'+t.teamId+'list').append("<li>"+p+"</li>"); //TODO: security.  vet member representation
+    }
+  }
+}
 
 var doodle = {
     // Define some variables
@@ -315,7 +335,7 @@ doodle.setLocalPen = function() {
 }
 doodle.setRemotePen = function() {
     doodle.context.strokeStyle = '#404040';
-    doodle.linethickness = 5;
+    doodle.linethickness = 2;
 }
 
 // Set the drawing method to pen
