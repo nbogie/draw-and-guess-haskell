@@ -58,7 +58,7 @@ $(document).ready(function () {
     doodle.init(socket);
 
     socket.onopen = function(event) {
-      socket.send('ClientHello');
+      socket.send('HELLO');
     };
 
     socket.onmessage = function(event) { 
@@ -97,7 +97,9 @@ updateTeams = function(teamsData) {
   $('#team1list').empty();
   for (var tix = 0; tix < teamsData.mteams.length; tix++) {
     var t = teamsData.mteams[tix];
-    console.log("TEAM " + t.teamId);
+    console.log("TEAM " + t.teamId + " score: "+t.mscore);
+    var sel = '#team'+t.teamId+'score';
+    $(sel).html(""+t.mscore);
     for (var pix = 0; pix < t.members.length; pix++) {
       var p = t.members[pix];
       console.log("member:  " + p);
