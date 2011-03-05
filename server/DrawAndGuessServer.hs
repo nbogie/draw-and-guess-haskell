@@ -19,17 +19,21 @@ import Messages
 main :: IO ()
 main = withSocketsDo $ do
   channel <- newChan
-  forkIO $ dispatcher channel [] initGameState
+  ws <- fmap lines $ readFile "guesswords.txt"
+  forkIO $ dispatcher channel [] $ initGameState ws
   socket <- listenOn (PortNumber 12345)
   putStrLn "Listening on port 12345."
   forever $ do
     (h, _, _) <- accept socket
     forkIO (welcome h channel)
 
+data PlayState = AwaitingPlayers | ReadyToStart | Guessing deriving (Eq, Show)
+
 data User = User String deriving (Eq, Ord, Show)
 data Event = Join Handle User 
              | SetNick Handle User
              | Message Handle User String
+             | Guess Handle String
              | Leave Handle User
              | RoundStart
              deriving (Eq, Show)
@@ -48,29 +52,44 @@ welcome h channel = do
       putStrLn $ "Shook hands with "++show h ++" sent welcome message."
       talkLoop h channel
 
-data GameState = GameState { teams::Teams} deriving (Show)
+data GameState = GameState { playState::PlayState, teams::Teams, currentWord::String, gWords::[String] } deriving (Show)
 
-initGameState :: GameState
-initGameState = GameState { teams = Teams {team1 = [], team2 = []}}
+-- TODO: can we just use cycle words to make it an infinite stream?
+initGameState :: [String] -> GameState
+initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], artist = Nothing, score = 0}, 
+                                              team2 = Team {teamMembers=[], artist = Nothing, score = 0} }
+                             , gWords = ws 
+                             , currentWord = head ws
+                             , playState = AwaitingPlayers }
 
-addToTeams :: Teams -> Handle -> IO Teams
+addToTeams :: Teams -> Handle -> Teams
 addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = do
-  print $ length t1
-  print $ length t2
-  if length t1 < length t2 
-    then return $ nowTeams { team1 = h:t1 }
-    else return $ nowTeams { team2 = h:t2 }
+  let l1 = length (teamMembers t1)
+  let l2 = length (teamMembers t2)
+  if l1 < l2
+    then nowTeams { team1 = addToTeam t1 h }
+    else nowTeams { team2 = addToTeam t2 h }
+
+addToTeam :: Team -> Handle -> Team
+addToTeam t h = let ms = teamMembers t
+                in t {teamMembers = h:ms} 
 
 removeFromTeams :: Teams -> Handle -> Teams
 removeFromTeams teams@(Teams {team1=t1, team2=t2}) h = 
-  let t1' = delete h t1
-      t2' = delete h t2
+  let t1' = removeFromTeam t1 h
+      t2' = removeFromTeam t2 h
   in Teams { team1 = t1', team2 = t2' }
 
+removeFromTeam :: Team -> Handle -> Team
+removeFromTeam t h = let ms = delete h (teamMembers t)
+                     in if (Just h) == artist t
+                          then t {teamMembers = ms, artist = Nothing}
+                          else t { teamMembers = ms}
+                                       
 dispatcher :: Chan Event -> [Handle] -> GameState -> IO ()
 dispatcher channel handles gameState = do
   ev <- readChan channel 
-  putStrLn $ "DISPATCHER readChan: " ++ show ev
+  putStrLn $ "DISPATCHER readChan: " ++ show ev ++ ". play state is: "++ show (playState gameState) ++ " word is: "++currentWord gameState
   case ev of
     Join h (User uname) -> do
       if h `elem` handles -- ignore this re-join from same handle, or better still, drop the handle.
@@ -81,13 +100,18 @@ dispatcher channel handles gameState = do
           let newHandles = h:handles
           putStrLn $ "DISP: Join Event.  Handle: "++ show h
           let nowTeams = teams gameState
-          newTeams <- addToTeams (teams gameState) h
+          let newTeams = addToTeams (teams gameState) h
           let gs' = gameState {teams = newTeams} 
           putStrLn $ "New Teams: " ++ show newTeams
           broadcast newHandles $ show ["Joined: ", show h, uname]
           putStrLn $ "Will broadcast " ++ (teamsMsgToJSON newTeams)
           broadcast newHandles $ teamsMsgToJSON newTeams
-          dispatcher channel newHandles gs'
+          gs'' <- if (playState gs' == AwaitingPlayers) && (length newHandles) > 1
+                      then do 
+                        writeChan channel RoundStart
+                        return $ gs' {playState = ReadyToStart}
+                      else return gs'
+          dispatcher channel newHandles gs''
     Leave h (User uname) -> do
       putStrLn "DISP: Leave Event"
       let newHandles = delete h handles
@@ -102,16 +126,62 @@ dispatcher channel handles gameState = do
     Message h (User uname) msg -> do
       putStrLn $ "DISP: User " ++ uname ++ " got message: " ++ msg ++ " from " ++ show h 
       broadcast handles $ uname ++ ": " ++ msg
-      if (isInfixOf "xyzzy" msg) then (writeChan channel RoundStart) else return ()
       dispatcher channel handles gameState
     RoundStart -> do
-      broadcast handles $ "ROUNDSTART"
-    -- TODO: how to put in a catch all that doesn't cause ghc to complain about overlapped matches?
-      dispatcher channel handles gameState
+      gs' <- case playState gameState of
+        ReadyToStart -> do
+          let g = gameState {playState = Guessing, currentWord = head (gWords gameState), 
+                             gWords = tail (gWords gameState) ++ [currentWord gameState]}
+          broadcast handles $ "ROUNDSTART"
+          broadcastArtists g handles $ "ROLE:artist WORD:" ++ currentWord g
+          -- broadcastGuessers g handles $ "ROUNDSTART.  ROLE=guesser"
+          return g
+        _ -> do putStrLn "Round already started"
+                return gameState
+      dispatcher channel handles gs'
+    Guess h guess -> do
+      putStrLn $ "Got guess of " ++ guess ++ " from "++(show h)
+      case playState gameState of
+        Guessing -> 
+          do if guess == currentWord gameState
+               then do 
+                 putStrLn "WIN"
+                 let gs' = processCorrectGuess gameState h
+                 broadcast handles $ teamsMsgToJSON (teams gs') -- updates score
+                 writeChan channel RoundStart
+                 dispatcher channel handles gs'
+               else do
+                 putStrLn "wrong"
+                 dispatcher channel handles gameState
+        _        -> do 
+                      putStrLn "Not currently accepting guesses"
+                      dispatcher channel handles gameState
+
+processCorrectGuess :: GameState -> Handle -> GameState
+processCorrectGuess gs guesserH = let t1 = team1 $ teams gs
+                                      t2 = team2 $ teams gs
+                                      t1' = if inTeam guesserH t1 then incScore t1 1 else t1
+                                      t2' = if inTeam guesserH t2 then incScore t2 1 else t2
+                                      newTeams = (teams gs) {team1 = t1', team2 = t2'}
+                                  in gs {playState = ReadyToStart, teams = newTeams}
+
+inTeam :: Handle -> Team -> Bool
+inTeam h t = h `elem` (teamMembers t)
+
+incScore :: Team -> Int -> Team
+incScore t amt = t { score = score t + amt }
+
+broadcastArtists :: GameState -> [Handle] -> String -> IO ()
+broadcastArtists gs hs msg = let artistHs = artistHandles gs hs
+                             in broadcast artistHs msg
+
+artistHandles :: GameState -> [Handle] -> [Handle]
+artistHandles gs hs = []
     
 broadcast :: [Handle] -> String -> IO ()
 -- TODO: handle case that the handle is closed (putFrame to a closed handle will kill the thread).
 broadcast handles msg = mapM_ (\h -> putFrame h (BU.fromString msg)) handles 
+sendOne handle msg = putFrame handle (BU.fromString msg)
 
 teamsMessage :: Teams -> String
 teamsMessage teams = teamsMsgToJSON teams
@@ -128,10 +198,11 @@ talkLoop h channel = do
     else do
       let msg = BU.toString msgB -- TODO: by going via String we'll unfortunately kill any invalid chars, where we'd prefer to leave the msg untouched.
       putStrLn $ "client handler: got message " ++ msg
-      
-      let ev = if "nick=" `isPrefixOf` msg
+      let ev = if "NICK: " `isPrefixOf` msg
                  then SetNick h (User msg) 
-                 else Message h (User "unknownx") msg
+                 else if "GUESS: " `isPrefixOf` msg
+                        then Guess h (drop (length "GUESS: ") msg)
+                        else Message h (User "unknownx") msg
       putStrLn $ "type of event: " ++ show ev
       writeChan channel ev
       putFrame h $ BU.fromString "ok"
