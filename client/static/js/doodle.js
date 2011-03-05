@@ -77,9 +77,24 @@ $(document).ready(function () {
         parts = event.data.split(" ");
         //console.log("GOT DRAW: " + event.data);
         var x0 = parseInt(parts[2]);
+    } else if ((/^STATE: /).test(event.data )) {
+      parts = event.data.split(" ");
+      var st = parts[1];
+      console.log("got state message: " + event.data + " from which extracted state " + st);
+      $('#playstate').html(st);
     } else if ("ROUNDSTART" == event.data ) {
       console.log("Round starts!");
       doodle.newDoodle();
+    } else if ((/^ROLE /).test(event.data) ) {
+      console.log("Role received: " + event.data);
+      parts = event.data.split(" ");
+      var role = parts[1];
+      if (role=="artist") {
+        var word = parts[3];
+        $('#wordtodraw').html(word);
+      } else {
+        $('#wordtodraw').html(" -- this round, you must guess!");
+      }
     } else if ("ok" == event.data ) {
     } else {
       console.log("GOT WS MSG: " + event.data);

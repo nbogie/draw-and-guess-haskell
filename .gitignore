@@ -1,1 +1,9 @@
 *.swp
+*.o
+*.hi
+*.hp
+*.ps
+*.aux
+*.prof
+tmp
+DrawAndGuessServer
