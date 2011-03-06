@@ -1,4 +1,8 @@
-when you reload the page in a client, it joins a second time, and the original socket seems to remain open at least for receiving messages.
+When you reload the page in a client, it joins a second time, and the original socket seems to remain open at least for receiving messages.
 
-It's easy when adding a new type of message for the dispatcher to handle to forget to call dispatcher loop again.  Better if all the dispatcher did was dispatch to a function to modify the gamestate (and the handles (not currently in the game state)), then the re-invocation of dispatcher would happen once only (i.e. abstract out the recursion/looping).
+It's too easy when adding a new type of message for the dispatcher to handle to forget to call dispatcher loop again.  Better if all the dispatcher did was dispatch to a function to modify the gamestate (and the handles (not currently in the game state)), then the re-invocation of dispatcher would happen once only (i.e. abstract out the recursion/looping).
+
+Got rid of the usernames dotted throughout the events redundantly alongside Handle. Instead, the gamestate maintains a map of handle-to-username.  However, I find that Handle isn't an instance of Ord (nor can I make it one) so I use (show handle) as the key as suggested by rwbarton on #haskell.  It'll do.  Bit surprised there isn't a map for non-ordinal keys.  Alternatively, I could have made a simple lookup based on a list of (Handle, Username) tuples, because Handle is an instance of Eq.
+
+The current naive send of every drawn lineseg WHEN its drawn is working ok for local testing, but should be replaced by a timer that looks for newly drawn segments and bundles them up, sending in one message.  No need to send line segs, we could send just a stream of points and start-line signals, Halfing the data.  And that's before any compression.
 

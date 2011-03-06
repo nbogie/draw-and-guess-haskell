@@ -9,11 +9,13 @@ import Control.Monad (forever)
 import Control.Concurrent (forkIO)
 
 import Control.Concurrent.Chan
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, fromMaybe)
 import Data.List (delete, isPrefixOf,(\\))
-
+import qualified Data.Map as M
 import Types
 import Messages
+import Text.HTML.TagSoup (escapeHTML)
+import Data.Char (isAlphaNum, isAlpha, toLower)
 
 -- Accepts clients, spawns a single handler for each one.
 main :: IO ()
@@ -29,9 +31,8 @@ main = withSocketsDo $ do
 
 data PlayState = AwaitingPlayers | ReadyToStart | InPlay deriving (Eq, Show)
 
-data User = User String deriving (Eq, Ord, Show)
 data Event = Join Handle
-             | SetNick Handle User
+             | SetNick Handle String
              | Message Handle String
              | Guess Handle String
              | Leave Handle
@@ -39,6 +40,8 @@ data Event = Join Handle
              deriving (Eq, Show)
 
 data Role = Artist | Guesser deriving (Show, Eq)
+
+
 --
 -- Shakes hands with client. If no error, starts talking.
 welcome :: Handle -> Chan Event -> IO ()
@@ -52,7 +55,7 @@ welcome h channel = do
       putStrLn $ "Shook hands with "++show h ++" sent welcome message."
       talkLoop h channel
 
-data GameState = GameState { playState::PlayState, teams::Teams, currentWord::String, gWords::[String] } deriving (Show)
+data GameState = GameState { playState::PlayState, teams::Teams, nameMap::HToNameMap, currentWord::String, gWords::[String] } deriving (Show)
 
 -- TODO: can we just use cycle words to make it an infinite stream?
 initGameState :: [String] -> GameState
@@ -60,7 +63,8 @@ initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], arti
                                               team2 = Team {teamMembers=[], artist = Nothing, score = 0} }
                              , gWords = ws 
                              , currentWord = head ws
-                             , playState = AwaitingPlayers }
+                             , playState = AwaitingPlayers
+                             , nameMap = M.empty }
 
 addToTeams :: Teams -> Handle -> Teams
 addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = do
@@ -105,8 +109,7 @@ dispatcher channel handles gameState = do
           let gs' = gameState {teams = newTeams} 
           putStrLn $ "New Teams: " ++ show newTeams
           broadcast newHandles $ "Joined: " ++  show h
-          putStrLn $ "Will broadcast " ++ teamsMsgToJSON newTeams
-          broadcast newHandles $ teamsMsgToJSON newTeams
+          broadcastRaw newHandles $ teamsMsgToJSON newTeams (nameMap gs')
           sendOne h $ "STATE: " ++ show (playState gs')
           gs'' <- if (playState gs' == AwaitingPlayers) && length newHandles > 1
                       then do 
@@ -119,15 +122,16 @@ dispatcher channel handles gameState = do
       let newHandles = delete h handles
       let newTeams = removeFromTeams (teams gameState) h
       let gs' = gameState { teams = newTeams } 
-      broadcast newHandles "left"
       dispatcher channel newHandles gs'
-    SetNick h (User uname) -> do
-      putStrLn $ "DISP: User " ++ uname ++ " set nick"
-      broadcast handles $ "NICK SET: " ++ uname
-      dispatcher channel handles gameState
+    SetNick h uname -> do
+      putStrLn $ "DISP: handle "++show h ++" set nick to " ++ uname
+      let nameMap' = M.insert (show h) uname $ nameMap gameState
+      let gs' = gameState {nameMap = nameMap'}
+      broadcastRaw handles $ teamsMsgToJSON (teams gs') nameMap'
+      dispatcher channel handles gs' 
     Message h msg -> do
-      let uname = "unknown" --lookup n htoNameMap
-      putStrLn $ "DISP: " ++ uname ++ " got message: " ++ msg ++ " from " ++ show h 
+      let uname = nameForHandle h (nameMap gameState)
+      putStrLn $ "DISP: " ++ uname ++ " got message: " ++ escapeHTML msg ++ " from " ++ show h 
       broadcast handles $ uname ++ ": " ++ msg
       dispatcher channel handles gameState
     RoundStart -> do
@@ -148,20 +152,25 @@ dispatcher channel handles gameState = do
       putStrLn $ "Got guess of " ++ guess ++ " from "++show h
       case playState gameState of
         InPlay -> 
-             if guess == currentWord gameState
+             if map toLower guess == map toLower (currentWord gameState)
                then do 
                  putStrLn $ "Correct guess by "++ show h
                  let gs' = processCorrectGuess gameState h
-                 broadcast handles $ teamsMsgToJSON (teams gs') -- updates score
-                 sendOne h "Correct!"
+                 broadcastRaw handles $ teamsMsgToJSON (teams gs') (nameMap gs') -- updates score
+                 broadcast handles $ "GUESS CORRECT " ++ nameForHandle h (nameMap gs') ++ " " ++ guess
+                 sendOne h "CORRECT_GUESS_BY_YOU"
                  writeChan channel RoundStart
                  dispatcher channel handles gs'
                else do
                  putStrLn "wrong guess"
+                 broadcast handles $ "GUESS WRONG " ++ nameForHandle h (nameMap gameState) ++ " " ++ guess
                  dispatcher channel handles gameState
         _        -> do 
                       putStrLn "Not currently accepting guesses"
                       dispatcher channel handles gameState
+
+nameForHandle :: Handle -> HToNameMap -> String
+nameForHandle h nmap = escapeHTML $ fromMaybe "Anonymous" (M.lookup (show h) nmap)
 
 processCorrectGuess :: GameState -> Handle -> GameState
 processCorrectGuess gs guesserH = 
@@ -193,12 +202,16 @@ guessers gs =
 
 -- guessers :: GameState -> [Handle]
     
-broadcast :: [Handle] -> String -> IO ()
+-- broadcast escapes html chars first.  if you don't want this, write broadcastRaw.
+-- broadcast :: [Handle] -> String -> IO ()
 -- TODO: handle case that the handle is closed (putFrame to a closed handle will kill the thread).
 broadcast handles msg = mapM_ (\h -> sendOne h msg) handles 
+broadcastRaw handles msg = mapM_ (\h -> sendOneRaw h msg) handles 
 
+-- sendOne escapes html chars first.  if you don't want this, write broadcastRaw.
 sendOne :: Handle -> String -> IO ()
-sendOne handle msg = putFrame handle (BU.fromString msg)
+sendOne handle msg = putFrame handle (BU.fromString (escapeHTML msg))
+sendOneRaw handle msg = putFrame handle (BU.fromString msg)
 
 -- Talks to the client (by echoing messages back) until EOF.
 talkLoop :: Handle -> Chan Event -> IO ()
@@ -210,15 +223,22 @@ talkLoop h channel = do
       hClose h
       writeChan channel $ Leave h
     else do
-      let msg = BU.toString msgB -- TODO: by going via String we'll unfortunately kill any invalid chars, where we'd prefer to leave the msg untouched.
-      putStrLn $ "client handler: got message " ++ msg
+      let msg = escapeHTML $ BU.toString msgB -- TODO: by going via String we'll unfortunately kill any invalid chars, where we'd prefer to leave the msg untouched.
       let ev = if "NICK: " `isPrefixOf` msg
-                 then SetNick h (User msg) 
+                 then SetNick h $ nickFromMsg msg
                  else if "GUESS: " `isPrefixOf` msg
-                        then Guess h (drop (length "GUESS: ") msg)
+                        then guessFromMsg msg h
                         else Message h msg
-      putStrLn $ "type of event: " ++ show ev
+      putStrLn $ "talkLoop: got message " ++ msg ++ " parsed as: "++show ev
       writeChan channel ev
       putFrame h $ BU.fromString "ok"
       talkLoop h channel
 
+guessFromMsg msg h = let raw = drop (length "GUESS: ") msg
+                         stripped = takeWhile isAlpha raw
+                         final = if null stripped then "x" else stripped
+                     in Guess h final
+
+nickFromMsg msg = let raw = drop (length "NICK: ") msg
+                      stripped = takeWhile isAlphaNum raw
+                  in  if length stripped < 1 then "Anonymous" else stripped

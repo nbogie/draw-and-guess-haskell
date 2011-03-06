@@ -64,7 +64,6 @@ $(document).ready(function () {
     socket.onmessage = function(event) { 
     if ((/ DRAW /).test(event.data )) { //TODO: tighten format
       parts = event.data.split(" ");
-      //console.log("GOT DRAW: " + event.data);
       var x0 = parseInt(parts[2]);
       var y0 = parseInt(parts[3]);
       var x1 = parseInt(parts[4]);
@@ -77,6 +76,13 @@ $(document).ready(function () {
         parts = event.data.split(" ");
         //console.log("GOT DRAW: " + event.data);
         var x0 = parseInt(parts[2]);
+    } else if ((/^GUESS /).test(event.data )) {
+      parts = event.data.split(" ");
+      var rightness = parts[1];
+      var who = parts[2];
+      var guess = parts[3];
+      console.log("got guess: " + guess + " by " + who + " right? "+rightness );
+      $(doodle.noticeID).prepend("<li>"+who + " guessed " + guess + " " +rightness+ "</li>");
     } else if ((/^STATE: /).test(event.data )) {
       parts = event.data.split(" ");
       var st = parts[1];
@@ -101,7 +107,10 @@ $(document).ready(function () {
       $(doodle.noticeID).prepend("<li>GOT: " + event.data + "</li>");
     }};
 
-    socket.onclose = function(event) { alert('The websocket to the game server is closed.'); }
+    socket.onclose = function(event) { 
+      $('#playstate').html("<span style='color: red'>DISCONNECTED</span>");
+      console.log('The websocket to the game server is closed.');
+    }
 
     socket.onerror = function(event) { alert('An error occurred with the game websocket: ' + event + " Data: " + event.data); }
 
@@ -133,6 +142,7 @@ var doodle = {
     'penID':            '#pen',
     'voteSkipID':       '#voteskip',
     'guessboxID':       '#guessbox',
+    'nameboxID':        '#namebox',
     'noticeID':         '#notification',
     'loaded_id':         false,
     'lineSegs':          []
@@ -167,6 +177,7 @@ doodle.init = function(givenSocket) {
     $(doodle.penID).bind('click', doodle.pen);
     $(doodle.voteSkipID).bind('click', doodle.voteSkip);
     $(doodle.guessboxID).bind('keyup', doodle.guessboxKeyup);
+    $(doodle.nameboxID).bind('keyup', doodle.nameboxKeyup);
 };
 
 doodle.loadDoodles = function(cookie) {
@@ -374,8 +385,10 @@ doodle.voteSkip = function() {
 }
 
 doodle.submitGuess = function(text) {
-  console.log("FAKE: would submit guess " + text);
   doodle.socket.send("GUESS: "+text);
+}
+doodle.submitName = function(text) {
+  doodle.socket.send("NICK: "+text);
 }
 
 doodle.guessboxKeyup = function(e) {
@@ -384,6 +397,14 @@ doodle.guessboxKeyup = function(e) {
         gb = $(doodle.guessboxID);
         doodle.submitGuess(gb.val());
         gb.val("");
+        break;
+  }
+}
+doodle.nameboxKeyup = function(e) {
+  switch(e.keyCode) {
+      case 13: //Event.KEY_RETURN:
+        nb = $(doodle.nameboxID);
+        doodle.submitName(nb.val());
         break;
   }
 }

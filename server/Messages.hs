@@ -7,6 +7,9 @@ import Text.JSON
 import Text.JSON.Generic (toJSON)
 import Text.HTML.TagSoup (escapeHTML)
 import Types
+import qualified Data.Map as M
+import Data.Maybe (fromMaybe)
+
 -- These data types are only a quick way of getting conversion to json.
 -- The field names are part of the external interface (via json)
 -- which is just wrong (fragile), but it is a quick start.
@@ -19,9 +22,10 @@ data TeamMsg = TeamMsg { teamId :: Integer,
      } deriving (Eq, Show, Typeable, Data)
 
 -- TODO ensure this makes safe json, and safe simple html
-teamsMsgToJSON :: Teams -> String
-teamsMsgToJSON tms = let tm = TeamsMsg [ makeTeamMsg (team1 tms) 0, makeTeamMsg (team2 tms) 1 ]
-                     in encode $ toJSON tm
+teamsMsgToJSON :: Teams -> HToNameMap -> String
+teamsMsgToJSON tms nMap = let tm = TeamsMsg [ makeTeamMsg (team1 tms) 0 nMap, makeTeamMsg (team2 tms) 1 nMap ]
+                          in encode $ toJSON tm
 
-makeTeamMsg :: Team -> Integer -> TeamMsg
-makeTeamMsg t i = TeamMsg i (map (escapeHTML . show) (teamMembers t)) (score t)
+makeTeamMsg :: Team -> Integer -> HToNameMap -> TeamMsg
+makeTeamMsg t i nMap = TeamMsg i (map hToHTML (teamMembers t)) (score t)
+  where hToHTML h = escapeHTML $ fromMaybe "anonymous" $ M.lookup (show h) nMap
