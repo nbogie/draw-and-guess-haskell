@@ -32,13 +32,15 @@
             <div id="column2">
               <div id="playstate">Not connected</div>
                 Word to draw: <span id="wordtodraw">Not received yet</span>
-              <!-- keep a submit button around for touchscreens -->
               <div id="guessform">
-                <input id='guessbox' type="text"/>
-                <input type="button" value="guess"/>
+                <label for="guessbox">Guess: </label><input id='guessbox' type="text"/>
               </div>
               <input type="button" value="Vote to Skip" id="voteskip"/>
-              notification area here
+              <div id="nameform">
+                <label for="namebox">Your Name: </label><input id='namebox' type="text"/>
+              </div>
+              <br/>
+              Notification area here: 
               <ul id="notification">
               </ul>
 
