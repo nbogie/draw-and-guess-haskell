@@ -33,6 +33,7 @@ data PlayState = AwaitingPlayers | ReadyToStart | InPlay deriving (Eq, Show)
 
 data Event = Join Handle
              | SetNick Handle String
+             | Draw Handle String
              | Message Handle String
              | Guess Handle String
              | Leave Handle
@@ -129,6 +130,9 @@ dispatcher channel handles gameState = do
       let gs' = gameState {nameMap = nameMap'}
       broadcastRaw handles $ teamsMsgToJSON (teams gs') nameMap'
       dispatcher channel handles gs' 
+    Draw h msg -> do
+      broadcast handles $ "DRAW " ++ msg
+      dispatcher channel handles gameState
     Message h msg -> do
       let uname = nameForHandle h (nameMap gameState)
       putStrLn $ "DISP: " ++ uname ++ " got message: " ++ escapeHTML msg ++ " from " ++ show h 
@@ -140,7 +144,7 @@ dispatcher channel handles gameState = do
           let g = gameState {playState = InPlay, 
                              currentWord = head (gWords gameState), 
                              gWords = tail (gWords gameState) ++ [currentWord gameState]}
-          broadcast handles $ "STATE: "++ show (playState g)
+          broadcast handles $ "STATE "++ show (playState g)
           broadcast handles "ROUNDSTART"
           broadcast (artists g) $ "ROLE artist WORD " ++ currentWord g
           broadcast (guessers g) "ROLE guesser"
@@ -224,17 +228,16 @@ talkLoop h channel = do
       writeChan channel $ Leave h
     else do
       let msg = escapeHTML $ BU.toString msgB -- TODO: by going via String we'll unfortunately kill any invalid chars, where we'd prefer to leave the msg untouched.
-      let ev = if "NICK: " `isPrefixOf` msg
-                 then SetNick h $ nickFromMsg msg
-                 else if "GUESS: " `isPrefixOf` msg
-                        then guessFromMsg msg h
-                        else Message h msg
+      let ev | "NICK: "  `isPrefixOf` msg = SetNick h $ nickFromMsg msg
+             | "GUESS: " `isPrefixOf` msg = guessFromMsg h msg
+             | "DRAW: " `isPrefixOf` msg = Draw h (drop (length "DRAW: ") msg)
+             | otherwise                  = Message h msg
       putStrLn $ "talkLoop: got message " ++ msg ++ " parsed as: "++show ev
       writeChan channel ev
       putFrame h $ BU.fromString "ok"
       talkLoop h channel
 
-guessFromMsg msg h = let raw = drop (length "GUESS: ") msg
+guessFromMsg h msg = let raw = drop (length "GUESS: ") msg
                          stripped = takeWhile isAlpha raw
                          final = if null stripped then "x" else stripped
                      in Guess h final

@@ -69,20 +69,19 @@ $(document).ready(function () {
     };
 
     socket.onmessage = function(event) { 
-    if ((/ DRAW /).test(event.data )) { //TODO: tighten format
+    if ((/^DRAW /).test(event.data )) {
       parts = event.data.split(" ");
-      var x0 = parseInt(parts[2]);
-      var y0 = parseInt(parts[3]);
-      var x1 = parseInt(parts[4]);
-      var y1 = parseInt(parts[5]);
+      var x0 = parseInt(parts[1]);
+      var y0 = parseInt(parts[2]);
+      var x1 = parseInt(parts[3]);
+      var y1 = parseInt(parts[4]);
       doodle.setRemotePen();
       doodle.drawfromto(x0, y0, x1, y1);
     } else if ((/\{\"mteams\"/).test(event.data)) {
-        console.log("updating teams with: " + event.data);
-        updateTeams(JSON.parse(event.data));//TODO: security.  only parse what you trust 100%
-        parts = event.data.split(" ");
-        //console.log("GOT DRAW: " + event.data);
-        var x0 = parseInt(parts[2]);
+      console.log("updating teams with: " + event.data);
+      updateTeams(JSON.parse(event.data));//TODO: security.  only parse what you trust 100%
+      parts = event.data.split(" ");
+      var x0 = parseInt(parts[2]);
     } else if ((/^GUESS /).test(event.data )) {
       parts = event.data.split(" ");
       var rightness = parts[1];
@@ -90,10 +89,9 @@ $(document).ready(function () {
       var guess = parts[3];
       console.log("got guess: " + guess + " by " + who + " right? "+rightness );
       $(doodle.noticeID).prepend("<li>"+who + " guessed " + guess + " " +rightness+ "</li>");
-    } else if ((/^STATE: /).test(event.data )) {
+    } else if ((/^STATE /).test(event.data )) {
       parts = event.data.split(" ");
       var st = parts[1];
-      console.log("got state message: " + event.data + " from which extracted state " + st);
       $('#playstate').html(st);
     } else if ("ROUNDSTART" == event.data ) {
       console.log("Round starts!");
@@ -110,7 +108,7 @@ $(document).ready(function () {
       }
     } else if ("ok" == event.data ) {
     } else {
-      console.log("GOT WS MSG: " + event.data);
+      console.log("GOT unrecognised ws msg: " + event.data);
       $(doodle.noticeID).prepend("<li>GOT: " + event.data + "</li>");
     }};
 
@@ -128,13 +126,11 @@ updateTeams = function(teamsData) {
   $('#team1list').empty();
   for (var tix = 0; tix < teamsData.mteams.length; tix++) {
     var t = teamsData.mteams[tix];
-    console.log("TEAM " + t.teamId + " score: "+t.mscore);
     var sel = '#team'+t.teamId+'score';
     $(sel).html(""+t.mscore);
     for (var pix = 0; pix < t.members.length; pix++) {
       var p = t.members[pix];
-      console.log("member:  " + p);
-      $('#team'+t.teamId+'list').append("<li>"+p+"</li>"); //TODO: security.  vet member representation
+      $('#team'+t.teamId+'list').append("<li>"+p+"</li>"); //TODO: security
     }
   }
 }
@@ -229,7 +225,7 @@ doodle.clearCanvas = function(ev) {
 }
 
 doodle.sendLineSeg = function(x0, y0, x1, y1) {
-  doodle.socket.send("DRAW "+x0 + " "+y0+" "+x1+" "+y1);
+  doodle.socket.send("DRAW: "+x0 + " "+y0+" "+x1+" "+y1);
 }
 
 doodle.drawStart = function(ev) {
