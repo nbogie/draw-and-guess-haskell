@@ -10,10 +10,6 @@
         mouse and touch input devices. The user can doodle away on the
         <canvas>, clear and save the resulting doodle.
         
-        Saving the doodle extracts the canvas data in base64 format,
-        POST's the string to a Python service which stores it in a 
-        database.
-    
     Author:         Andrew Mason
     Contact:        a.w.mason at gmail dot com
     Author's Site:  http://analoguesignal.com/
@@ -54,7 +50,18 @@
 // Run once the DOM is ready
 $(document).ready(function () {
 
-    var socket = new WebSocket('ws://localhost:12345');
+    var savedServer =  window.localStorage.getItem('serverAddr');
+    var serverURL = 'ws://localhost:12345';
+    var enableServerChanges = false;
+    if (enableServerChanges && savedServer != null) {
+      serverURL = savedServer;
+      console.log("saved server: "+serverURL);
+      $('#serverBox').val(serverURL);
+    }
+
+    console.log("Attempting to connect to " + serverURL);
+    var socket = new WebSocket(serverURL);
+
     doodle.init(socket);
 
     socket.onopen = function(event) {
@@ -141,8 +148,10 @@ var doodle = {
     'newID':            '#new',
     'penID':            '#pen',
     'voteSkipID':       '#voteskip',
-    'guessboxID':       '#guessbox',
-    'nameboxID':        '#namebox',
+    'guessBoxID':       '#guessBox',
+    'nameBoxID':        '#nameBox',
+    'serverBoxID':      '#serverBox',
+    'saveServerID':     '#saveServer',
     'noticeID':         '#notification',
     'loaded_id':         false,
     'lineSegs':          []
@@ -176,55 +185,11 @@ doodle.init = function(givenSocket) {
     // Add Pen selection event
     $(doodle.penID).bind('click', doodle.pen);
     $(doodle.voteSkipID).bind('click', doodle.voteSkip);
-    $(doodle.guessboxID).bind('keyup', doodle.guessboxKeyup);
-    $(doodle.nameboxID).bind('keyup', doodle.nameboxKeyup);
+    $(doodle.guessBoxID).bind('keyup', doodle.guessBoxKeyup);
+    $(doodle.nameBoxID).bind('keyup', doodle.nameBoxKeyup);
+    $(doodle.saveServerID).bind('click', doodle.saveServer);
 };
 
-doodle.loadDoodles = function(cookie) {
-    var keys = cookie.split(",");
-    for (var i = 0; i < keys.length; i++) {
-        doodle.newDoodle('/thumb?id='+keys[i]+'&rnd='+Math.random(), keys[i]);
-    }
-}
-
-doodle.saveImage = function(ev) {
-    // Extract the Base64 data from the canvas and post it to the server
-    base64 = doodle.canvas.toDataURL("image/png");
-    if(!doodle.updating) {
-        $.post('/save', {img: base64}, function(data) {doodle.updateThumb(data)});
-    } else {
-        $.post('/save', {img: base64, key: doodle.loaded_id}, function(data) {doodle.updateThumb(data)});
-    }
-}
-
-doodle.updateThumb = function(data) {
-    // Notify the user that the image has been saved
-    //$(doodle.noticeID).html('Saved');
-
-    var thumb = $('img.active');
-    // Reset the thumb image
-    // Note: a random number is added to the image to prevent caching
-    thumb.attr('src', '/thumb?id='+data+'&rnd='+Math.random());
-    thumb.attr('id', 'i'+data);
-    $('img.active').bind('click', doodle.loadImage);
-    
-    // Save doodle ID to a cookie
-    if (doodle.loaded_id !== data) {
-        var keys;
-        if ($.cookie('doodles')) {
-            keys = $.cookie('doodles') + ',' + data;
-        } else {
-            keys = data;
-        }
-        $.cookie('doodles', keys);
-    }
-    
-    // Store doodle ID
-    doodle.loaded_id = data;
-    
-    // The doodle has been saved, update from here on
-    doodle.updating = true;
-}
 
 doodle.newDoodle = function(src, id) {
     doodle.clearCanvas();
@@ -235,51 +200,6 @@ doodle.newDoodle = function(src, id) {
     if (!id) {
         id = '';
     }
-    // Build an empty thumb
-    thumb_html = '<img class="active" src="'+src+'" id="i'+id+'" width="32" height="24" />';
-
-    // Add the thumb to the DOM then bind click event
-    $('#output').append(thumb_html);
-    $('#output img').bind('click', doodle.loadImage);
-    //$('img.active').bind('click', doodle.loadImage);
-}
-
-doodle.loadImage = function(event) {
-    // Stop from following link
-    event.preventDefault();
-    
-    // If the current doodle is loaded, do nothing
-    if ($(this).hasClass('active')) {
-        return;
-    }
-    
-    // Clear the canvas
-    doodle.clearCanvas();
-    
-    // Load saved image onto the canvas
-    if ($(this).attr('id')) {
-        doodle.loaded_id = $(this).attr('id').slice(1);
-        var img_src = '/image?id=' + doodle.loaded_id + '&rnd='+Math.random();
-        var img = new Image();
-        img.src = img_src;
-        
-        // Wait for image to finish loading before drawing to canvas
-        img.onload = function() {
-            doodle.context.drawImage(img, 0, 0);
-        };
-        
-        // Flag that user is updating a saved doodle
-        doodle.updating = true;
-    } else {
-        
-    }
-    
-    
-    // Add active class to selected thumb
-    $(this).addClass('active');  
-    
-
-
 }
 
 doodle.clearCanvas = function(ev) {
@@ -391,21 +311,28 @@ doodle.submitName = function(text) {
   doodle.socket.send("NICK: "+text);
 }
 
-doodle.guessboxKeyup = function(e) {
+doodle.guessBoxKeyup = function(e) {
   switch(e.keyCode) {
       case 13: //Event.KEY_RETURN:
-        gb = $(doodle.guessboxID);
+        gb = $(doodle.guessBoxID);
         doodle.submitGuess(gb.val());
         gb.val("");
         break;
   }
 }
-doodle.nameboxKeyup = function(e) {
+doodle.nameBoxKeyup = function(e) {
   switch(e.keyCode) {
       case 13: //Event.KEY_RETURN:
-        nb = $(doodle.nameboxID);
+        nb = $(doodle.nameBoxID);
         doodle.submitName(nb.val());
+        nb.val("");
         break;
   }
 }
 
+doodle.saveServer = function(e) {
+  nb = $(doodle.serverBoxID);
+  var addr = nb.val();
+  var testSocket = new WebSocket(addr);
+  window.localStorage.setItem('serverAddr', addr);
+}

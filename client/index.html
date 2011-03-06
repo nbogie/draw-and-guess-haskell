@@ -33,11 +33,11 @@
               <div id="playstate">Not connected</div>
                 Word to draw: <span id="wordtodraw">Not received yet</span>
               <div id="guessform">
-                <label for="guessbox">Guess: </label><input id='guessbox' type="text"/>
+                <label for="guessBox">Guess: </label><input id='guessBox' type="text"/>
               </div>
               <input type="button" value="Vote to Skip" id="voteskip"/>
               <div id="nameform">
-                <label for="namebox">Your Name: </label><input id='namebox' type="text"/>
+                <label for="nameBox">Your Name: </label><input id='nameBox' type="text"/>
               </div>
               <br/>
               Notification area here: 
@@ -73,8 +73,14 @@
               </ul>
             </div>
           </div>
+          <div class="menuboxes">
+            <div id="serverform">
+              <label for="serverBox">Server (currently ignored): </label><input id='serverBox' type="text" placeholder="ws://localhost:12345"/>
+              <input type="button" id="saveServer" value="Save"/>
+            </div>
+ 
+          </div>
         </div>
-
 
       </div><!-- end outerwrapper -->
       <!-- Free template created for and provided by http://freehtml5templates.com thanks to designer Pam Atkins-->
