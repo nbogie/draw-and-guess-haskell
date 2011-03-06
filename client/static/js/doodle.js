@@ -1,35 +1,15 @@
 /* ------------------------------------------------------------------------
-    Title:          Tiny Doodle
-    
-    Version:        0.2
-    URL:            http://tinydoodle.com/
+    Title:          Draw and Guess Client
     
     Description:
-        Tiny Doodle is an exercise in learning about <canvas>.
-        Event handlers are attached the to <canvas> elemet for both
-        mouse and touch input devices. The user can doodle away on the
-        <canvas>, clear and save the resulting doodle.
-        
-    Author:         Andrew Mason
-    Contact:        a.w.mason at gmail dot com
-    Author's Site:  http://analoguesignal.com/
+
+    Credits: 
+        Heavily based upon v 0.2 of Tiny Doodle http://tinydoodle.com/
+        by Andrew Mason (a.w.mason at gmail dot com) http://analoguesignal.com/
     
     Requirements:
         * Jquery 1.3+
     
-    Changelog:
-        0.1 (28th May 2009)
-            - First demo build
-        0.2 (30th May 2009)
-            - Addded Pen and Eraser
-            - Commented code
-            - 
-    
-    Todo:
-        * Error checking and handling
-        * Clean up code
-        * Add yellow throber to indicate added images
-        * Add share links
     
     Licence:
     This program is free software: you can redistribute it and/or modify
@@ -88,14 +68,18 @@ $(document).ready(function () {
       var who = parts[2];
       var guess = parts[3];
       console.log("got guess: " + guess + " by " + who + " right? "+rightness );
-      $(doodle.noticeID).prepend("<li>"+who + " guessed " + guess + " " +rightness+ "</li>");
+      if (rightness=="CORRECT") {
+        $(doodle.noticeID).prepend("<li>"+who + " guessed <b>" + guess + "</b> ✔</li>");
+      } else {
+        $(doodle.noticeID).prepend("<li>"+who + " guessed <b><del>" + guess + "</del></b> ✘</li>");
+      }
     } else if ((/^STATE /).test(event.data )) {
       parts = event.data.split(" ");
       var st = parts[1];
       $('#playstate').html(st);
     } else if ("ROUNDSTART" == event.data ) {
       console.log("Round starts!");
-      doodle.newDoodle();
+      doodle.clearCanvas();
     } else if ((/^ROLE /).test(event.data) ) {
       console.log("Role received: " + event.data);
       parts = event.data.split(" ");
@@ -139,18 +123,12 @@ var doodle = {
     // Define some variables
     'drawing':          false,
     'linethickness':    2,
-    'updating':         false,
-    'saveID':           '#save',
-    'newID':            '#new',
-    'penID':            '#pen',
     'voteSkipID':       '#voteskip',
     'guessBoxID':       '#guessBox',
     'nameBoxID':        '#nameBox',
     'serverBoxID':      '#serverBox',
     'saveServerID':     '#saveServer',
-    'noticeID':         '#notification',
-    'loaded_id':         false,
-    'lineSegs':          []
+    'noticeID':         '#notification'
 };
 
 doodle.init = function(givenSocket) {
@@ -159,7 +137,7 @@ doodle.init = function(givenSocket) {
     doodle.canvas = $('#doodle_canvas')[0];
     doodle.context = doodle.canvas.getContext('2d');
     
-    doodle.newDoodle();
+    doodle.clearCanvas();
     
     // Mouse based interface
     $(doodle.canvas).bind('mousedown', doodle.drawStart);
@@ -172,31 +150,13 @@ doodle.init = function(givenSocket) {
     $(doodle.canvas).bind('touchmove', doodle.draw);
     $(doodle.canvas).bind('touchend', doodle.drawEnd);
     
-    // Add save event to save button
-    $(doodle.saveID).bind('click', doodle.saveImage);
-    
-    // Add clear canvas event
-    $(doodle.newID).bind('click', doodle.newDoodle);
-    
-    // Add Pen selection event
-    $(doodle.penID).bind('click', doodle.pen);
+    //Not really doodle stuff
     $(doodle.voteSkipID).bind('click', doodle.voteSkip);
     $(doodle.guessBoxID).bind('keyup', doodle.guessBoxKeyup);
     $(doodle.nameBoxID).bind('keyup', doodle.nameBoxKeyup);
     $(doodle.saveServerID).bind('click', doodle.saveServer);
 };
 
-
-doodle.newDoodle = function(src, id) {
-    doodle.clearCanvas();
-    if (!src) {
-        src = 'static/images/blank.gif';
-    }
-    
-    if (!id) {
-        id = '';
-    }
-}
 
 doodle.clearCanvas = function(ev) {
     // Clear existing drawing
@@ -212,16 +172,8 @@ doodle.clearCanvas = function(ev) {
     doodle.context.fillRect(1, 1, doodle.canvas.width-2, doodle.canvas.height-2);
     doodle.context.fillStyle = '#000000';
     
-    // Remove active class from other thumbs
-    $('#output IMG').each(function() {
-        $(this).removeClass('active');
-    });
-    
     // Set the drawning method to pen
-    doodle.pen();
-    
-    // Flag that the user is working on a new doodle
-    doodle.updating = false;
+    doodle.setLocalPen();
 }
 
 doodle.sendLineSeg = function(x0, y0, x1, y1) {
@@ -278,22 +230,8 @@ doodle.setLocalPen = function() {
     doodle.linethickness = 2;
 }
 doodle.setRemotePen = function() {
-    doodle.context.strokeStyle = '#404040';
-    doodle.linethickness = 2;
-}
-
-// Set the drawing method to pen
-doodle.pen = function() {
-    // Check if pen is already selected
-    if($(doodle.penID).hasClass('active')) {
-        return;
-    }
-    // Change color and thickness of the line
     doodle.context.strokeStyle = '#000000';
-    doodle.linethickness = 1;
-    
-    // Flag that pen is now active
-    $(doodle.penID).toggleClass('active');
+    doodle.linethickness = 2;
 }
 
 doodle.voteSkip = function() {
