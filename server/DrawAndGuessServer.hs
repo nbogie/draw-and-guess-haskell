@@ -90,7 +90,7 @@ removeFromTeams (Teams {team1=t1, team2=t2}) h =
 removeFromTeam :: Team -> Handle -> Team
 removeFromTeam t h = let ms = delete h (teamMembers t)
                      in if Just h == artist t
-                          then t {teamMembers = ms, artist = Nothing }
+                          then t {teamMembers = ms, artist = if null ms then Nothing else Just (head ms) }
                           else t { teamMembers = ms }
                                        
 dispatcher :: Chan Event -> [Handle] -> GameState -> IO ()
@@ -111,7 +111,7 @@ dispatcher channel handles gameState = do
           putStrLn $ "New Teams: " ++ show newTeams
           broadcast newHandles $ "Joined: " ++  show h
           broadcastRaw newHandles $ teamsMsgToJSON newTeams (nameMap gs')
-          sendOne h $ "STATE: " ++ show (playState gs')
+          sendOne h $ "STATE " ++ show (playState gs')
           gs'' <- if (playState gs' == AwaitingPlayers) && length newHandles > 1
                       then do 
                         writeChan channel RoundStart
@@ -121,8 +121,8 @@ dispatcher channel handles gameState = do
     Leave h -> do
       putStrLn "DISP: Leave Event"
       let newHandles = delete h handles
-      let newTeams = removeFromTeams (teams gameState) h
-      let gs' = gameState { teams = newTeams } 
+      let gs' = removeFromGame gameState h
+      broadcastRaw newHandles $ teamsMsgToJSON (teams gs') (nameMap gs')
       dispatcher channel newHandles gs'
     SetNick h uname -> do
       putStrLn $ "DISP: handle "++show h ++" set nick to " ++ uname
@@ -131,7 +131,11 @@ dispatcher channel handles gameState = do
       broadcastRaw handles $ teamsMsgToJSON (teams gs') nameMap'
       dispatcher channel handles gs' 
     Draw h msg -> do
-      broadcast handles $ "DRAW " ++ msg
+      case teamFor h (teams gameState) of
+        -- a handle should always be part of a team, 
+        -- but maybe it has been removed (kicked?) since this msg was enqueued.
+        Just t -> broadcast (teamMembers t) $ "DRAW " ++ msg
+        Nothing -> return () 
       dispatcher channel handles gameState
     Message h msg -> do
       let uname = nameForHandle h (nameMap gameState)
@@ -176,6 +180,11 @@ dispatcher channel handles gameState = do
 nameForHandle :: Handle -> HToNameMap -> String
 nameForHandle h nmap = escapeHTML $ fromMaybe "Anonymous" (M.lookup (show h) nmap)
 
+removeFromGame :: GameState -> Handle -> GameState
+removeFromGame gs h =  let newTeams = removeFromTeams (teams gs) h
+                           newNameMap = M.delete (show h) (nameMap gs)
+                       in gs { teams = newTeams, nameMap = newNameMap } 
+                           
 processCorrectGuess :: GameState -> Handle -> GameState
 processCorrectGuess gs guesserH = 
   let t1 = team1 $ teams gs
@@ -187,6 +196,11 @@ processCorrectGuess gs guesserH =
 
 inTeam :: Handle -> Team -> Bool
 inTeam h t = h `elem` teamMembers t
+
+teamFor :: Handle -> Teams -> Maybe Team
+teamFor h ts | inTeam h (team1 ts) = Just $ team1 ts
+teamFor h ts | inTeam h (team2 ts) = Just $ team2 ts
+             | otherwise = Nothing
 
 incScore :: Team -> Int -> Team
 incScore t amt = t { score = score t + amt }

@@ -1,10 +1,14 @@
 /* ------------------------------------------------------------------------
     Title:          Draw and Guess Client
     
-    Description:
+    Description:  A client for a websockets-based drawing and guessing game.
+       When connected to a suitable server, each client is assigned a
+       team and role.  As an artist, the player must draw a provided word.
+       As a guesser, the player must guess at what the artist is drawing, 
+       as it appears on his screen, before the other team do the same.
 
     Credits: 
-        Heavily based upon v 0.2 of Tiny Doodle http://tinydoodle.com/
+        Based heavily upon v0.2 of Tiny Doodle http://tinydoodle.com/
         by Andrew Mason (a.w.mason at gmail dot com) http://analoguesignal.com/
     
     Requirements:
