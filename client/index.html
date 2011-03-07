@@ -20,9 +20,9 @@
       <div class="row">
         <div class="col col_12">
           <div class="contentboxes">
-            <h1>Hacktionary</h1>
+            <h1>Draw and Guess</h1>
             <div id="canvas_wrapper">
-              <canvas width="640" height="150" id="doodle_canvas">
+              <canvas width="640" height="400" id="doodle_canvas">
               <div id="no_doodle_canvas">
                 <code>canvas</code> element not supported.
               </div>
@@ -30,16 +30,6 @@
             </div>
 
             <div id="column2">
-              <div id="playstate">Not connected</div>
-                Word to draw: <span id="wordtodraw">Not received yet</span>
-              <div id="guessform">
-                <label for="guessBox">Guess: </label><input id='guessBox' type="text"/>
-              </div>
-              <input type="button" value="Vote to Skip" id="voteskip"/>
-              <div id="nameform">
-                <label for="nameBox">Your Name: </label><input id='nameBox' type="text"/>
-              </div>
-              <br/>
               Notification area here: 
               <ul id="notification">
               </ul>
@@ -52,8 +42,8 @@
             <div id="credits">
               <h2>Credits</h2>
               <ul>
-                <li>Uses TinyDoodle (local-only) drawing library by <a href="http://coderonfire.com/">Andrew Mason</a>.  </li>
-                <li>Layout based on one from from original <a href="http://freehtml5templates.com">Free HTML5 Templates</a>.</li>
+                <li>Uses TinyDoodle, a (local-only) drawing library by <a href="http://coderonfire.com/">Andrew Mason</a>.  </li>
+                <li>Uses a layout from <a href="http://freehtml5templates.com">Free HTML5 Templates</a>.</li>
               </ul>
             </div>
           </div>
@@ -72,6 +62,19 @@
               <ul id="team1list">
               </ul>
             </div>
+          </div>
+          <div class="menuboxes">
+              <div id="playstate">Not connected</div>
+                Word to draw: <span id="wordtodraw">Not received yet</span>
+              <div id="guessform">
+                <label for="guessBox">Guess: </label><input id='guessBox' type="text"/>
+              </div>
+              <input type="button" value="Vote to Skip" id="voteskip"/>
+              <div id="nameform">
+                <label for="nameBox">Your Name: </label><input id='nameBox' type="text"/>
+              </div>
+              <br/>
+
           </div>
           <div class="menuboxes">
             <div id="serverform">
