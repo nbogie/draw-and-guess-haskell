@@ -18,6 +18,7 @@ data TeamsMsg = TeamsMsg
 
 data TeamMsg = TeamMsg { teamId :: Integer, 
                          members :: [String], 
+                         martist :: String, 
                          mscore :: Int
      } deriving (Eq, Show, Typeable, Data)
 
@@ -27,5 +28,7 @@ teamsMsgToJSON tms nMap = let tm = TeamsMsg [ makeTeamMsg (team1 tms) 0 nMap, ma
                           in encode $ toJSON tm
 
 makeTeamMsg :: Team -> Integer -> HToNameMap -> TeamMsg
-makeTeamMsg t i nMap = TeamMsg i (map hToHTML (teamMembers t)) (score t)
-  where hToHTML h = escapeHTML $ fromMaybe "anonymous" $ M.lookup (show h) nMap
+makeTeamMsg t@(Team {teamMembers = ms, artist = a}) i nMap = 
+      TeamMsg i (map hToHTML ms) artistName (score t)
+        where hToHTML h = escapeHTML $ fromMaybe "anonymous" $ M.lookup (show h) nMap
+              artistName = escapeHTML $ fromMaybe "" (a >>= (\h -> M.lookup (show h) nMap))

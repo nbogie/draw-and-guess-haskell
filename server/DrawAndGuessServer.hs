@@ -58,6 +58,10 @@ welcome h channel = do
 
 data GameState = GameState { playState::PlayState, teams::Teams, nameMap::HToNameMap, currentWord::String, gWords::[String] } deriving (Show)
 
+xcurrentWord :: GameState -> String
+xcurrentWord g | null (gWords g) = error "No words in game state"
+               |otherwise        = head $ gWords g
+
 -- TODO: can we just use cycle words to make it an infinite stream?
 initGameState :: [String] -> GameState
 initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], artist = Nothing, score = 0}, 
@@ -129,6 +133,7 @@ dispatcher channel handles gameState = do
       let nameMap' = M.insert (show h) uname $ nameMap gameState
       let gs' = gameState {nameMap = nameMap'}
       broadcastRaw handles $ teamsMsgToJSON (teams gs') nameMap'
+      sendOne h $ "YOURNICK " ++ uname
       dispatcher channel handles gs' 
     Draw h msg -> do
       case teamFor h (teams gameState) of
@@ -145,9 +150,10 @@ dispatcher channel handles gameState = do
     RoundStart -> do
       gs' <- case playState gameState of
         ReadyToStart -> do
-          let g = gameState {playState = InPlay, 
-                             currentWord = head (gWords gameState), 
-                             gWords = tail (gWords gameState) ++ [currentWord gameState]}
+          let g = cycleWord $ gameState {playState = InPlay
+                             , teams = cycleArtists (teams gameState)}
+          print $ gWords g
+          print $ "New word for round " ++ currentWord g
           broadcast handles $ "STATE "++ show (playState g)
           broadcast handles "ROUNDSTART"
           broadcast (artists g) $ "ROLE artist WORD " ++ currentWord g
@@ -176,6 +182,19 @@ dispatcher channel handles gameState = do
         _        -> do 
                       putStrLn "Not currently accepting guesses"
                       dispatcher channel handles gameState
+
+cycleWord :: GameState -> GameState
+cycleWord g = let oldWord = currentWord g
+                  (w:ws) = gWords g
+              in g { currentWord = w, gWords = ws ++ [oldWord] }
+
+cycleArtists :: Teams -> Teams
+cycleArtists ts@(Teams {team1 = t1, team2 = t2}) = ts{ team1 = cycleArtist t1, team2 = cycleArtist t2 }
+
+cycleArtist :: Team -> Team
+cycleArtist t@(Team {artist=aMaybe, teamMembers=ms}) | null ms   = t
+                                                     | otherwise = let ms' = tail ms ++ [head ms]
+                                                                   in t {teamMembers = ms', artist = Just (head ms')}
 
 nameForHandle :: Handle -> HToNameMap -> String
 nameForHandle h nmap = escapeHTML $ fromMaybe "Anonymous" (M.lookup (show h) nmap)
