@@ -7,7 +7,7 @@ Got rid of the usernames dotted throughout the events redundantly alongside Hand
 The current naive send of every drawn lineseg WHEN its drawn is working ok for local testing, but should be replaced by a timer that looks for newly drawn segments and bundles them up, sending in one message.  No need to send line segs, we could send just a stream of points and start-line signals, Halfing the data.  And that's before any compression.
 
 The handles maintained by dispatch loop should be moved into GameState.
-
+If there are only ever members and artists, we don't need a separate set of handles - it's just the superset of artists and members from all teams.
 
 UI
 ===

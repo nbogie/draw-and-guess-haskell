@@ -23,8 +23,9 @@ main = withSocketsDo $ do
   channel <- newChan
   ws <- fmap lines $ readFile "guesswords.txt"
   forkIO $ dispatcher channel [] $ initGameState ws
-  socket <- listenOn (PortNumber 12345)
-  putStrLn "Listening on port 12345."
+  let pNum = 12345
+  socket <- listenOn (PortNumber pNum)
+  putStrLn $ "Listening on port " ++ show pNum
   forever $ do
     (h, _, _) <- accept socket
     forkIO (welcome h channel)
@@ -56,10 +57,10 @@ welcome h channel = do
       putStrLn $ "Shook hands with "++show h ++" sent welcome message."
       talkLoop h channel
 
-data GameState = GameState { playState::PlayState, teams::Teams, nameMap::HToNameMap, currentWord::String, gWords::[String] } deriving (Show)
+data GameState = GameState { playState::PlayState, teams::Teams, nameMap::HToNameMap, gWords::[String] } deriving (Show)
 
-xcurrentWord :: GameState -> String
-xcurrentWord g | null (gWords g) = error "No words in game state"
+currentWord :: GameState -> String
+currentWord g | null (gWords g) = error "No words in game state"
                |otherwise        = head $ gWords g
 
 -- TODO: can we just use cycle words to make it an infinite stream?
@@ -67,7 +68,6 @@ initGameState :: [String] -> GameState
 initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], artist = Nothing, score = 0}, 
                                               team2 = Team {teamMembers=[], artist = Nothing, score = 0} }
                              , gWords = ws 
-                             , currentWord = head ws
                              , playState = AwaitingPlayers
                              , nameMap = M.empty }
 
@@ -112,10 +112,9 @@ dispatcher channel handles gameState = do
           putStrLn $ "DISP: Join Event.  Handle: "++ show h
           let newTeams = addToTeams (teams gameState) h
           let gs' = gameState {teams = newTeams} 
-          putStrLn $ "New Teams: " ++ show newTeams
-          broadcast newHandles $ "Joined: " ++  show h
-          broadcastRaw newHandles $ teamsMsgToJSON newTeams (nameMap gs')
-          sendOne h $ "STATE " ++ show (playState gs')
+          putStrLn $ "New Teams: " ++ show (teams gs')
+          broadcast newHandles $ "Joined: " ++ show h
+          broadcastTeamsAndState newHandles gs'
           gs'' <- if (playState gs' == AwaitingPlayers) && length newHandles > 1
                       then do 
                         writeChan channel RoundStart
@@ -152,12 +151,9 @@ dispatcher channel handles gameState = do
         ReadyToStart -> do
           let g = cycleWord $ gameState {playState = InPlay
                              , teams = cycleArtists (teams gameState)}
-          print $ gWords g
-          print $ "New word for round " ++ currentWord g
-          broadcast handles $ "STATE "++ show (playState g)
+          print $ "NEW WORD for round " ++ currentWord g
           broadcast handles "ROUNDSTART"
-          broadcast (artists g) $ "ROLE artist WORD " ++ currentWord g
-          broadcast (guessers g) "ROLE guesser"
+          broadcastTeamsAndState handles g
           return g
         _ -> do putStrLn "Round already started"
                 return gameState
@@ -183,10 +179,17 @@ dispatcher channel handles gameState = do
                       putStrLn "Not currently accepting guesses"
                       dispatcher channel handles gameState
 
+broadcastTeamsAndState :: [Handle] -> GameState -> IO ()
+broadcastTeamsAndState hs g = do
+          broadcastRaw hs $ teamsMsgToJSON (teams g) (nameMap g)
+          broadcast (artists g) $ "ROLE artist WORD " ++ currentWord g
+          broadcast (guessers g) "ROLE guesser"
+          broadcast hs $ "STATE "++ show (playState g)
+
 cycleWord :: GameState -> GameState
-cycleWord g = let oldWord = currentWord g
-                  (w:ws) = gWords g
-              in g { currentWord = w, gWords = ws ++ [oldWord] }
+cycleWord g = g { gWords = ws ++ [w] }
+                where (w:ws) = gWords g
+              
 
 cycleArtists :: Teams -> Teams
 cycleArtists ts@(Teams {team1 = t1, team2 = t2}) = ts{ team1 = cycleArtist t1, team2 = cycleArtist t2 }
