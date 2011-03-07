@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+
+    <title>Draw and Guess</title>
+    <!-- Meta Tags -->
+    <meta http-equiv="content-type" content="application/xhtml+xml; charset=utf-8" />
+
+    <link rel="stylesheet" href="static/css/reset.css" type="text/css"  />
+    <link rel="stylesheet" href="static/css/general.css" type="text/css"  />
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="" />
+
+  </head>
+
+  <body>
+    <div id="outerwrapper">
+
+
+      <div class="row">
+        <div class="col col_12">
+          <div class="contentboxes">
+            <h1>Draw and Guess</h1>
+            <div id="canvas_wrapper">
+              <canvas width="640" height="400" id="doodle_canvas">
+              <div id="no_doodle_canvas">
+                <code>canvas</code> element not supported.
+              </div>
+              </canvas>
+            </div>
+
+            <div id="column2">
+              Notification area here: 
+              <ul id="notification">
+              </ul>
+
+            </div>
+          </div>
+
+
+          <div class="contentboxes">
+            <div id="credits">
+              <h2>Credits</h2>
+              <ul>
+                <li>Uses TinyDoodle, a (local-only) drawing library by <a href="http://coderonfire.com/">Andrew Mason</a>.  </li>
+                <li>Uses a layout from <a href="http://freehtml5templates.com">Free HTML5 Templates</a>.</li>
+              </ul>
+            </div>
+          </div>
+
+
+        </div>
+
+        <div class="col col_4">
+          <div class="menuboxes">
+            <span id="scoreboard-title">Scores</span>
+            <div>
+              <span class="team-title">Blue Team: </span><span id="team0score"></span>
+              <ul id="team0list">
+              </ul>
+              <span class="team-title">Red Team: </span><span id="team1score"></span>
+              <ul id="team1list">
+              </ul>
+            </div>
+          </div>
+          <div class="menuboxes">
+              <div id="playstate">Not connected</div>
+                Word to draw: <span id="wordtodraw">Not received yet</span>
+              <div id="guessform">
+                <label for="guessBox">Guess: </label><input id='guessBox' type="text"/>
+              </div>
+              <input type="button" value="Vote to Skip" id="voteskip"/>
+              <div id="nameform">
+                <label for="nameBox">Your Name: </label><input id='nameBox' type="text"/>
+              </div>
+              <br/>
+
+          </div>
+          <div class="menuboxes">
+            <div id="serverform">
+              <label for="serverBox">Server (currently ignored): </label><input id='serverBox' type="text" placeholder="ws://localhost:12345"/>
+              <input type="button" id="saveServer" value="Save"/>
+            </div>
+ 
+          </div>
+        </div>
+
+      </div><!-- end outerwrapper -->
+      <!-- Free template created for and provided by http://freehtml5templates.com thanks to designer Pam Atkins-->
+
+
+      <!-- JavaScript  -->
+      <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js"></script>
+      <script type="text/javascript" src="static/js/doodle.js"></script>
+      <script type="text/javascript">
+        $(document).ready(function () {
+            });
+</script>
+</body>
+</html>
