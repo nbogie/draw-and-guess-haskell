@@ -112,7 +112,6 @@ dispatcher channel handles gameState = do
              dispatcher channel handles gameState
         else do
           let newHandles = h:handles
-          putStrLn $ "DISP: Join Event.  Handle: "++ show h
           let newTeams = addToTeams (teams gameState) h
           let gs' = gameState {teams = newTeams} 
           putStrLn $ "New Teams: " ++ show (teams gs')
@@ -125,13 +124,11 @@ dispatcher channel handles gameState = do
                       else return gs'
           dispatcher channel newHandles gs''
     Leave h -> do
-      putStrLn "DISP: Leave Event"
       let newHandles = delete h handles
       let gs' = removeFromGame gameState h
       broadcastRaw newHandles $ teamsMsgToJSON (teams gs') (nameMap gs')
       dispatcher channel newHandles gs'
     SetNick h uname -> do
-      putStrLn $ "DISP: handle "++show h ++" set nick to " ++ uname
       let nameMap' = M.insert (show h) uname $ nameMap gameState
       let gs' = gameState {nameMap = nameMap'}
       broadcastRaw handles $ teamsMsgToJSON (teams gs') nameMap'
@@ -146,7 +143,6 @@ dispatcher channel handles gameState = do
       dispatcher channel handles gameState
     Message h msg -> do
       let uname = nameForHandle h (nameMap gameState)
-      putStrLn $ "DISP: " ++ uname ++ " got message: " ++ escapeHTML msg ++ " from " ++ show h 
       broadcast handles $ uname ++ ": " ++ msg
       dispatcher channel handles gameState
     RoundStart -> do
