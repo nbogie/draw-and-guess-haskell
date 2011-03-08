@@ -64,7 +64,7 @@ $(document).ready(function () {
       var y1 = parseInt(parts[4]);
       doodle.setRemotePen();
       doodle.drawfromto(x0, y0, x1, y1);
-    } else if ((/\{\"mteams\"/).test(event.data)) {
+    } else if ((/^\{\"mteams\"/).test(event.data)) {
       console.log("updating teams with: " + event.data);
       updateTeams(JSON.parse(event.data));//TODO: security.  only parse what you trust 100%
       parts = event.data.split(" ");
