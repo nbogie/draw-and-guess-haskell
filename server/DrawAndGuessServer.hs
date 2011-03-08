@@ -13,6 +13,7 @@ import Data.Maybe (mapMaybe, fromMaybe)
 import Data.List (delete, isPrefixOf,(\\))
 import qualified Data.Map as M
 import Types
+import Teams
 import Messages
 import Text.HTML.TagSoup (escapeHTML)
 import Data.Char (isAlphaNum, isAlpha, toLower)
@@ -29,22 +30,6 @@ main = withSocketsDo $ do
   forever $ do
     (h, _, _) <- accept socket
     forkIO (welcome h channel)
-
-data Event = Join Handle
-             | SetNick Handle String
-             | Draw Handle String
-             | Message Handle String
-             | Guess Handle String
-             | Leave Handle
-             | RoundStart
-             deriving (Eq, Show)
-
-data Role = Artist | Guesser deriving (Show, Eq)
-
-data PlayState = AwaitingPlayers | ReadyToStart | InPlay deriving (Eq, Show)
-
-data GameState = GameState { playState::PlayState, teams::Teams, 
-                             nameMap::HToNameMap, gWords::[String] } deriving (Show)
 
 currentWord :: GameState -> String
 currentWord g | null (gWords g) = error "No words in game state"
@@ -184,76 +169,6 @@ initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], arti
                              , nameMap = M.empty }
 
 --------------------------------------------------------------------------------
----- functions dealing with teams.  A teams module?
---------------------------------------------------------------------------------
-inTeam :: Handle -> Team -> Bool
-inTeam h t = h `elem` teamMembers t
-
-teamFor :: Handle -> Teams -> Maybe Team
-teamFor h ts | inTeam h (team1 ts) = Just $ team1 ts
-teamFor h ts | inTeam h (team2 ts) = Just $ team2 ts
-             | otherwise = Nothing
-
-incScore :: Team -> Int -> Team
-incScore t amt = t { score = score t + amt }
-
-artists :: GameState -> [Handle]
-artists gs = 
-  let t1 = team1 $ teams gs
-      t2 = team2 $ teams gs
-  in mapMaybe artist [t1,t2] 
-
-guessers :: GameState -> [Handle]
-guessers gs = 
-  let t1 = team1 $ teams gs
-      t2 = team2 $ teams gs
-      allMembers = concatMap teamMembers [t1,t2]
-  in  allMembers \\ artists gs
-
-addToTeams :: Teams -> Handle -> Teams
-addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = do
-  let l1 = length (teamMembers t1)
-  let l2 = length (teamMembers t2)
-  if l1 < l2
-    then nowTeams { team1 = addToTeam t1 h }
-    else nowTeams { team2 = addToTeam t2 h }
-
-addToTeam :: Team -> Handle -> Team
-addToTeam t h = let ms = teamMembers t
-                    existingArtist = artist t
-                    newArtist = if existingArtist==Nothing then Just h else existingArtist
-                in t {teamMembers = h:ms, artist=newArtist} 
-
-removeFromTeams :: Teams -> Handle -> Teams
-removeFromTeams (Teams {team1=t1, team2=t2}) h = 
-  let t1' = removeFromTeam t1 h
-      t2' = removeFromTeam t2 h
-  in Teams { team1 = t1', team2 = t2' }
-
-removeFromTeam :: Team -> Handle -> Team
-removeFromTeam t h = 
-   let ms = delete h (teamMembers t)
-   in if Just h == artist t
-        then t {teamMembers = ms, artist = if null ms then Nothing else Just (head ms) }
-        else t { teamMembers = ms }
-
-removeFromGame :: GameState -> Handle -> GameState
-removeFromGame gs h =  let newTeams = removeFromTeams (teams gs) h
-                           newNameMap = M.delete (show h) (nameMap gs)
-                       in gs { teams = newTeams, nameMap = newNameMap } 
-                           
-cycleArtists :: Teams -> Teams
-cycleArtists ts@(Teams {team1 = t1, team2 = t2}) = 
-     ts{ team1 = cycleArtist t1, team2 = cycleArtist t2 }
-
-cycleArtist :: Team -> Team
-cycleArtist t@(Team {artist=aMaybe, teamMembers=ms}) 
-                      | null ms   = t
-                      | otherwise = 
-                          let ms' = tail ms ++ [head ms]
-                          in t {teamMembers = ms', artist = Just (head ms')}
-
---------------------------------------------------------------------------------
 ---- broadcast functions
 --------------------------------------------------------------------------------
 processCorrectGuess :: GameState -> Handle -> GameState
@@ -283,6 +198,10 @@ broadcastTeamsAndState hs g = do
           broadcast (guessers g) "ROLE guesser"
           broadcast hs $ "STATE "++ show (playState g)
 
+--------------------------------------------------------------------------------
+---- misc functions
+--------------------------------------------------------------------------------
+
 cycleWord :: GameState -> GameState
 cycleWord g = g { gWords = ws ++ [w] }
                 where (w:ws) = gWords g
@@ -290,4 +209,7 @@ cycleWord g = g { gWords = ws ++ [w] }
 nameForHandle :: Handle -> HToNameMap -> String
 nameForHandle h nmap = escapeHTML $ fromMaybe "Anonymous" (M.lookup (show h) nmap)
 
-
+removeFromGame :: GameState -> Handle -> GameState
+removeFromGame gs h =  let newTeams = removeFromTeams (teams gs) h
+                           newNameMap = M.delete (show h) (nameMap gs)
+                       in gs { teams = newTeams, nameMap = newNameMap } 
