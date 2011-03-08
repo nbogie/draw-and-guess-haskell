@@ -30,8 +30,6 @@ main = withSocketsDo $ do
     (h, _, _) <- accept socket
     forkIO (welcome h channel)
 
-data PlayState = AwaitingPlayers | ReadyToStart | InPlay deriving (Eq, Show)
-
 data Event = Join Handle
              | SetNick Handle String
              | Draw Handle String
@@ -43,6 +41,14 @@ data Event = Join Handle
 
 data Role = Artist | Guesser deriving (Show, Eq)
 
+data PlayState = AwaitingPlayers | ReadyToStart | InPlay deriving (Eq, Show)
+
+data GameState = GameState { playState::PlayState, teams::Teams, 
+                             nameMap::HToNameMap, gWords::[String] } deriving (Show)
+
+currentWord :: GameState -> String
+currentWord g | null (gWords g) = error "No words in game state"
+               |otherwise        = head $ gWords g
 
 --
 -- Shakes hands with client. If no error, starts talking.
@@ -57,47 +63,38 @@ welcome h channel = do
       putStrLn $ "Shook hands with "++show h ++" sent welcome message."
       talkLoop h channel
 
-data GameState = GameState { playState::PlayState, teams::Teams, 
-                             nameMap::HToNameMap, gWords::[String] } deriving (Show)
+-- Talks to the client (by echoing messages back) until EOF.
+talkLoop :: Handle -> Chan Event -> IO ()
+talkLoop h channel = do
+  msgB <- getFrame h
+  if B.null msgB
+    then do
+      putStrLn "EOF encountered. Closing handle."
+      hClose h
+      writeChan channel $ Leave h
+    else do
+      -- TODO: by going via String we'll unfortunately kill any invalid chars, 
+      -- where we'd prefer to leave the msg untouched.
+      let msg = escapeHTML $ BU.toString msgB
+      let ev | "NICK: "  `isPrefixOf` msg = SetNick h $ nickFromMsg msg
+             | "GUESS: " `isPrefixOf` msg = guessFromMsg h msg
+             | "DRAW: " `isPrefixOf` msg = Draw h (drop (length "DRAW: ") msg)
+             | otherwise                  = Message h msg
+      putStrLn $ "talkLoop: got message " ++ msg ++ " parsed as: "++show ev
+      writeChan channel ev
+      putFrame h $ BU.fromString "ok"
+      talkLoop h channel
 
-currentWord :: GameState -> String
-currentWord g | null (gWords g) = error "No words in game state"
-               |otherwise        = head $ gWords g
+guessFromMsg h msg = let raw = drop (length "GUESS: ") msg
+                         stripped = takeWhile isAlpha raw
+                         final = if null stripped then "x" else stripped
+                     in Guess h final
 
--- TODO: can we just use cycle words to make it an infinite stream?
-initGameState :: [String] -> GameState
-initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], artist = Nothing, score = 0}, 
-                                              team2 = Team {teamMembers=[], artist = Nothing, score = 0} }
-                             , gWords = ws 
-                             , playState = AwaitingPlayers
-                             , nameMap = M.empty }
+nickFromMsg msg = let raw = drop (length "NICK: ") msg
+                      stripped = takeWhile isAlphaNum raw
+                  in  if length stripped < 1 then "Anonymous" else stripped
 
-addToTeams :: Teams -> Handle -> Teams
-addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = do
-  let l1 = length (teamMembers t1)
-  let l2 = length (teamMembers t2)
-  if l1 < l2
-    then nowTeams { team1 = addToTeam t1 h }
-    else nowTeams { team2 = addToTeam t2 h }
 
-addToTeam :: Team -> Handle -> Team
-addToTeam t h = let ms = teamMembers t
-                    existingArtist = artist t
-                    newArtist = if existingArtist==Nothing then Just h else existingArtist
-                in t {teamMembers = h:ms, artist=newArtist} 
-
-removeFromTeams :: Teams -> Handle -> Teams
-removeFromTeams (Teams {team1=t1, team2=t2}) h = 
-  let t1' = removeFromTeam t1 h
-      t2' = removeFromTeam t2 h
-  in Teams { team1 = t1', team2 = t2' }
-
-removeFromTeam :: Team -> Handle -> Team
-removeFromTeam t h = 
-   let ms = delete h (teamMembers t)
-   in if Just h == artist t
-        then t {teamMembers = ms, artist = if null ms then Nothing else Just (head ms) }
-        else t { teamMembers = ms }
                                        
 dispatcher :: Chan Event -> [Handle] -> GameState -> IO ()
 dispatcher channel handles gameState = do
@@ -178,46 +175,17 @@ dispatcher channel handles gameState = do
           putStrLn "Not currently accepting guesses"
           dispatcher channel handles gameState
 
-broadcastTeamsAndState :: [Handle] -> GameState -> IO ()
-broadcastTeamsAndState hs g = do
-          broadcastRaw hs $ teamsMsgToJSON (teams g) (nameMap g)
-          broadcast (artists g) $ "ROLE artist WORD " ++ currentWord g
-          broadcast (guessers g) "ROLE guesser"
-          broadcast hs $ "STATE "++ show (playState g)
+-- TODO: can we just use cycle words to make it an infinite stream?
+initGameState :: [String] -> GameState
+initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], artist = Nothing, score = 0}, 
+                                              team2 = Team {teamMembers=[], artist = Nothing, score = 0} }
+                             , gWords = ws 
+                             , playState = AwaitingPlayers
+                             , nameMap = M.empty }
 
-cycleWord :: GameState -> GameState
-cycleWord g = g { gWords = ws ++ [w] }
-                where (w:ws) = gWords g
-              
-
-cycleArtists :: Teams -> Teams
-cycleArtists ts@(Teams {team1 = t1, team2 = t2}) = 
-     ts{ team1 = cycleArtist t1, team2 = cycleArtist t2 }
-
-cycleArtist :: Team -> Team
-cycleArtist t@(Team {artist=aMaybe, teamMembers=ms}) 
-                      | null ms   = t
-                      | otherwise = 
-                          let ms' = tail ms ++ [head ms]
-                          in t {teamMembers = ms', artist = Just (head ms')}
-
-nameForHandle :: Handle -> HToNameMap -> String
-nameForHandle h nmap = escapeHTML $ fromMaybe "Anonymous" (M.lookup (show h) nmap)
-
-removeFromGame :: GameState -> Handle -> GameState
-removeFromGame gs h =  let newTeams = removeFromTeams (teams gs) h
-                           newNameMap = M.delete (show h) (nameMap gs)
-                       in gs { teams = newTeams, nameMap = newNameMap } 
-                           
-processCorrectGuess :: GameState -> Handle -> GameState
-processCorrectGuess gs guesserH = 
-  let t1 = team1 $ teams gs
-      t2 = team2 $ teams gs
-      t1' = if inTeam guesserH t1 then incScore t1 1 else t1
-      t2' = if inTeam guesserH t2 then incScore t2 1 else t2
-      newTeams = (teams gs) {team1 = t1', team2 = t2'}
-  in gs {playState = ReadyToStart, teams = newTeams}
-
+--------------------------------------------------------------------------------
+---- functions dealing with teams.  A teams module?
+--------------------------------------------------------------------------------
 inTeam :: Handle -> Team -> Bool
 inTeam h t = h `elem` teamMembers t
 
@@ -242,8 +210,61 @@ guessers gs =
       allMembers = concatMap teamMembers [t1,t2]
   in  allMembers \\ artists gs
 
--- guessers :: GameState -> [Handle]
-    
+addToTeams :: Teams -> Handle -> Teams
+addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = do
+  let l1 = length (teamMembers t1)
+  let l2 = length (teamMembers t2)
+  if l1 < l2
+    then nowTeams { team1 = addToTeam t1 h }
+    else nowTeams { team2 = addToTeam t2 h }
+
+addToTeam :: Team -> Handle -> Team
+addToTeam t h = let ms = teamMembers t
+                    existingArtist = artist t
+                    newArtist = if existingArtist==Nothing then Just h else existingArtist
+                in t {teamMembers = h:ms, artist=newArtist} 
+
+removeFromTeams :: Teams -> Handle -> Teams
+removeFromTeams (Teams {team1=t1, team2=t2}) h = 
+  let t1' = removeFromTeam t1 h
+      t2' = removeFromTeam t2 h
+  in Teams { team1 = t1', team2 = t2' }
+
+removeFromTeam :: Team -> Handle -> Team
+removeFromTeam t h = 
+   let ms = delete h (teamMembers t)
+   in if Just h == artist t
+        then t {teamMembers = ms, artist = if null ms then Nothing else Just (head ms) }
+        else t { teamMembers = ms }
+
+removeFromGame :: GameState -> Handle -> GameState
+removeFromGame gs h =  let newTeams = removeFromTeams (teams gs) h
+                           newNameMap = M.delete (show h) (nameMap gs)
+                       in gs { teams = newTeams, nameMap = newNameMap } 
+                           
+cycleArtists :: Teams -> Teams
+cycleArtists ts@(Teams {team1 = t1, team2 = t2}) = 
+     ts{ team1 = cycleArtist t1, team2 = cycleArtist t2 }
+
+cycleArtist :: Team -> Team
+cycleArtist t@(Team {artist=aMaybe, teamMembers=ms}) 
+                      | null ms   = t
+                      | otherwise = 
+                          let ms' = tail ms ++ [head ms]
+                          in t {teamMembers = ms', artist = Just (head ms')}
+
+--------------------------------------------------------------------------------
+---- broadcast functions
+--------------------------------------------------------------------------------
+processCorrectGuess :: GameState -> Handle -> GameState
+processCorrectGuess gs guesserH = 
+  let t1 = team1 $ teams gs
+      t2 = team2 $ teams gs
+      t1' = if inTeam guesserH t1 then incScore t1 1 else t1
+      t2' = if inTeam guesserH t2 then incScore t2 1 else t2
+      newTeams = (teams gs) {team1 = t1', team2 = t2'}
+  in gs {playState = ReadyToStart, teams = newTeams}
+
 -- broadcast escapes html chars first.  if you don't want this, write broadcastRaw.
 -- broadcast :: [Handle] -> String -> IO ()
 -- TODO: handle case that the handle is closed (putFrame to a closed handle will kill the thread).
@@ -255,33 +276,18 @@ sendOne :: Handle -> String -> IO ()
 sendOne handle msg = putFrame handle (BU.fromString (escapeHTML msg))
 sendOneRaw handle msg = putFrame handle (BU.fromString msg)
 
--- Talks to the client (by echoing messages back) until EOF.
-talkLoop :: Handle -> Chan Event -> IO ()
-talkLoop h channel = do
-  msgB <- getFrame h
-  if B.null msgB
-    then do
-      putStrLn "EOF encountered. Closing handle."
-      hClose h
-      writeChan channel $ Leave h
-    else do
-      -- TODO: by going via String we'll unfortunately kill any invalid chars, 
-      -- where we'd prefer to leave the msg untouched.
-      let msg = escapeHTML $ BU.toString msgB
-      let ev | "NICK: "  `isPrefixOf` msg = SetNick h $ nickFromMsg msg
-             | "GUESS: " `isPrefixOf` msg = guessFromMsg h msg
-             | "DRAW: " `isPrefixOf` msg = Draw h (drop (length "DRAW: ") msg)
-             | otherwise                  = Message h msg
-      putStrLn $ "talkLoop: got message " ++ msg ++ " parsed as: "++show ev
-      writeChan channel ev
-      putFrame h $ BU.fromString "ok"
-      talkLoop h channel
+broadcastTeamsAndState :: [Handle] -> GameState -> IO ()
+broadcastTeamsAndState hs g = do
+          broadcastRaw hs $ teamsMsgToJSON (teams g) (nameMap g)
+          broadcast (artists g) $ "ROLE artist WORD " ++ currentWord g
+          broadcast (guessers g) "ROLE guesser"
+          broadcast hs $ "STATE "++ show (playState g)
 
-guessFromMsg h msg = let raw = drop (length "GUESS: ") msg
-                         stripped = takeWhile isAlpha raw
-                         final = if null stripped then "x" else stripped
-                     in Guess h final
+cycleWord :: GameState -> GameState
+cycleWord g = g { gWords = ws ++ [w] }
+                where (w:ws) = gWords g
 
-nickFromMsg msg = let raw = drop (length "NICK: ") msg
-                      stripped = takeWhile isAlphaNum raw
-                  in  if length stripped < 1 then "Anonymous" else stripped
+nameForHandle :: Handle -> HToNameMap -> String
+nameForHandle h nmap = escapeHTML $ fromMaybe "Anonymous" (M.lookup (show h) nmap)
+
+
