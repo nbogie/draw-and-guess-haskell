@@ -79,15 +79,26 @@ nickFromMsg msg = let raw = drop (length "NICK: ") msg
                       stripped = takeWhile isAlphaNum raw
                   in  if length stripped < 1 then "Anonymous" else stripped
 
-
-                                       
 dispatcher :: Chan Event -> GameState -> IO ()
 dispatcher channel gameState = do
   ev <- readChan channel 
   putStrLn $ "DISPATCHER readChan: " ++ show ev ++ ". play state is: " ++ 
              show (playState gameState) ++ " word is: "++currentWord gameState
   nextGameState <- case ev of
-    Join h -> 
+    Join h -> handleJoin h channel gameState
+    Leave h -> handleLeave h channel gameState
+    SetNick h uname -> handleSetNick h uname channel gameState
+    Message h msg -> handleMessage h msg channel gameState 
+    RoundStart -> handleRoundStart channel gameState
+    Draw h msg -> handleDraw h msg channel gameState
+    Guess h guess -> handleGuess h guess channel gameState
+  dispatcher channel nextGameState
+
+-------------------------------------------------------------------------------
+-- handlers
+-------------------------------------------------------------------------------
+handleJoin :: Handle -> Chan Event -> GameState -> IO GameState
+handleJoin h ch gameState = 
       if h `elem` (handles gameState) -- ignore this re-join from same handle, or better still, drop the handle.
         then
           do putStrLn "ignoring join because handle contains already"
@@ -99,31 +110,37 @@ dispatcher channel gameState = do
           broadcastTeamsAndState (handles gs') gs'
           if (playState gs' == AwaitingPlayers) && length (handles gs') > 1
                       then do 
-                        writeChan channel RoundStart
+                        writeChan ch RoundStart
                         return $ gs' {playState = ReadyToStart}
                       else return gs'
-    Leave h -> do
-      let gs' = removeFromGame gameState h
-      broadcastRaw (handles gs') $ teamsMsgToJSON (teams gs') (nameMap gs')
-      return gs'
-    SetNick h uname -> do
+
+handleLeave :: Handle -> Chan Event -> GameState -> IO GameState 
+handleLeave h ch gameState = do
+    let gs' = removeFromGame gameState h
+    broadcastRaw (handles gs') $ teamsMsgToJSON (teams gs') (nameMap gs')
+    return gs'
+                                       
+handleSetNick h uname ch gameState = do
       let nameMap' = M.insert (show h) uname $ nameMap gameState
       let gs' = gameState {nameMap = nameMap'}
       broadcastRaw (handles gs') $ teamsMsgToJSON (teams gs') nameMap'
       sendOne h $ "YOURNICK " ++ uname
-      return gs' 
-    Draw h msg -> do
+      return gs'
+
+handleMessage h msg ch gameState = do
+      let uname = nameForHandle h (nameMap gameState)
+      broadcast (handles gameState) $ uname ++ ": " ++ msg
+      return gameState
+
+handleDraw h msg ch gameState = do
       case teamFor h (teams gameState) of
         -- a handle should always be part of a team, 
         -- but maybe it has been removed (kicked?) since this msg was enqueued.
         Just t -> broadcast (teamMembers t) $ "DRAW " ++ msg
         Nothing -> return () 
       return gameState
-    Message h msg -> do
-      let uname = nameForHandle h (nameMap gameState)
-      broadcast (handles gameState) $ uname ++ ": " ++ msg
-      return gameState
-    RoundStart -> 
+
+handleRoundStart ch gameState = 
       case playState gameState of
         ReadyToStart -> do
           let g = cycleWord $ gameState {playState = InPlay
@@ -135,7 +152,9 @@ dispatcher channel gameState = do
         _ -> do 
           putStrLn "Round already started"
           return gameState
-    Guess h guess -> do
+
+handleGuess :: Handle -> String -> Chan Event -> GameState -> IO GameState
+handleGuess h guess ch gameState = do
       putStrLn $ "Got guess of " ++ guess ++ " from "++show h
       case playState gameState of
         InPlay -> 
@@ -146,7 +165,7 @@ dispatcher channel gameState = do
               broadcastRaw (handles gs') $ teamsMsgToJSON (teams gs') (nameMap gs') -- updates score
               broadcast (handles  gs') $ "GUESS CORRECT " ++ nameForHandle h (nameMap gs') ++ " " ++ guess
               sendOne h "CORRECT_GUESS_BY_YOU"
-              writeChan channel RoundStart
+              writeChan ch RoundStart
               return gs'
             else do
               putStrLn "wrong guess"
@@ -155,16 +174,6 @@ dispatcher channel gameState = do
         _      -> do 
           putStrLn "Not currently accepting guesses"
           return gameState
-  dispatcher channel nextGameState
-
--- TODO: can we just use cycle words to make it an infinite stream?
-initGameState :: [String] -> GameState
-initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], artist = Nothing, score = 0}, 
-                                              team2 = Team {teamMembers=[], artist = Nothing, score = 0} }
-                             , handles = []
-                             , gWords = ws 
-                             , playState = AwaitingPlayers
-                             , nameMap = M.empty }
 
 --------------------------------------------------------------------------------
 ---- broadcast functions
@@ -199,6 +208,15 @@ broadcastTeamsAndState hs g = do
 --------------------------------------------------------------------------------
 ---- misc functions
 --------------------------------------------------------------------------------
+
+-- QUESTION: can we just use (cycle words) to make it an infinite stream?
+initGameState :: [String] -> GameState
+initGameState ws = GameState { teams = Teams {team1 = Team {teamMembers=[], artist = Nothing, score = 0}, 
+                                              team2 = Team {teamMembers=[], artist = Nothing, score = 0} }
+                             , handles = []
+                             , gWords = ws 
+                             , playState = AwaitingPlayers
+                             , nameMap = M.empty }
 
 cycleWord :: GameState -> GameState
 cycleWord g = g { gWords = ws ++ [w] }
