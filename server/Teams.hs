@@ -1,7 +1,7 @@
 module Teams where
 import System.IO (Handle)
 import Data.Maybe (mapMaybe, fromMaybe)
-import Data.List (delete, isPrefixOf,(\\))
+import Data.List (delete, (\\))
 
 import Types
 
@@ -30,18 +30,19 @@ guessers gs =
   in  allMembers \\ artists gs
 
 addToTeams :: Teams -> Handle -> Teams
-addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = do
+addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = 
   let l1 = length (teamMembers t1)
-  let l2 = length (teamMembers t2)
-  if l1 < l2
-    then nowTeams { team1 = addToTeam t1 h }
-    else nowTeams { team2 = addToTeam t2 h }
+      l2 = length (teamMembers t2)
+  -- We want p2 to join on same team as p1 to get play going fast.  
+  -- Assignment will alternate thereafter.
+  in if l1+l2 < 2 || l1 < l2  
+       then nowTeams { team1 = addToTeam t1 h }
+       else nowTeams { team2 = addToTeam t2 h }
 
 addToTeam :: Team -> Handle -> Team
 addToTeam t h = let ms = teamMembers t
-                    existingArtist = artist t
-                    newArtist = if existingArtist==Nothing then Just h else existingArtist
-                in t {teamMembers = h:ms, artist=newArtist} 
+                in t {teamMembers = ms++[h], -- new joiners are last to draw
+                      artist=Just (fromMaybe h (artist t))}
 
 removeFromTeams :: Teams -> Handle -> Teams
 removeFromTeams (Teams {team1=t1, team2=t2}) h = 
@@ -62,7 +63,7 @@ cycleArtists ts@(Teams {team1 = t1, team2 = t2}) =
      ts{ team1 = cycleArtist t1, team2 = cycleArtist t2 }
 
 cycleArtist :: Team -> Team
-cycleArtist t@(Team {artist=aMaybe, teamMembers=ms}) 
+cycleArtist t@(Team {teamMembers=ms}) 
                       | null ms   = t
                       | otherwise = 
                           let ms' = tail ms ++ [head ms]
