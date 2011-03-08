@@ -57,7 +57,8 @@ welcome h channel = do
       putStrLn $ "Shook hands with "++show h ++" sent welcome message."
       talkLoop h channel
 
-data GameState = GameState { playState::PlayState, teams::Teams, nameMap::HToNameMap, gWords::[String] } deriving (Show)
+data GameState = GameState { playState::PlayState, teams::Teams, 
+                             nameMap::HToNameMap, gWords::[String] } deriving (Show)
 
 currentWord :: GameState -> String
 currentWord g | null (gWords g) = error "No words in game state"
@@ -92,15 +93,17 @@ removeFromTeams (Teams {team1=t1, team2=t2}) h =
   in Teams { team1 = t1', team2 = t2' }
 
 removeFromTeam :: Team -> Handle -> Team
-removeFromTeam t h = let ms = delete h (teamMembers t)
-                     in if Just h == artist t
-                          then t {teamMembers = ms, artist = if null ms then Nothing else Just (head ms) }
-                          else t { teamMembers = ms }
+removeFromTeam t h = 
+   let ms = delete h (teamMembers t)
+   in if Just h == artist t
+        then t {teamMembers = ms, artist = if null ms then Nothing else Just (head ms) }
+        else t { teamMembers = ms }
                                        
 dispatcher :: Chan Event -> [Handle] -> GameState -> IO ()
 dispatcher channel handles gameState = do
   ev <- readChan channel 
-  putStrLn $ "DISPATCHER readChan: " ++ show ev ++ ". play state is: "++ show (playState gameState) ++ " word is: "++currentWord gameState
+  putStrLn $ "DISPATCHER readChan: " ++ show ev ++ ". play state is: " ++ 
+             show (playState gameState) ++ " word is: "++currentWord gameState
   case ev of
     Join h -> 
       if h `elem` handles -- ignore this re-join from same handle, or better still, drop the handle.
@@ -162,22 +165,22 @@ dispatcher channel handles gameState = do
       putStrLn $ "Got guess of " ++ guess ++ " from "++show h
       case playState gameState of
         InPlay -> 
-             if map toLower guess == map toLower (currentWord gameState)
-               then do 
-                 putStrLn $ "Correct guess by "++ show h
-                 let gs' = processCorrectGuess gameState h
-                 broadcastRaw handles $ teamsMsgToJSON (teams gs') (nameMap gs') -- updates score
-                 broadcast handles $ "GUESS CORRECT " ++ nameForHandle h (nameMap gs') ++ " " ++ guess
-                 sendOne h "CORRECT_GUESS_BY_YOU"
-                 writeChan channel RoundStart
-                 dispatcher channel handles gs'
-               else do
-                 putStrLn "wrong guess"
-                 broadcast handles $ "GUESS WRONG " ++ nameForHandle h (nameMap gameState) ++ " " ++ guess
-                 dispatcher channel handles gameState
-        _        -> do 
-                      putStrLn "Not currently accepting guesses"
-                      dispatcher channel handles gameState
+          if map toLower guess == map toLower (currentWord gameState)
+            then do 
+              putStrLn $ "Correct guess by "++ show h
+              let gs' = processCorrectGuess gameState h
+              broadcastRaw handles $ teamsMsgToJSON (teams gs') (nameMap gs') -- updates score
+              broadcast handles $ "GUESS CORRECT " ++ nameForHandle h (nameMap gs') ++ " " ++ guess
+              sendOne h "CORRECT_GUESS_BY_YOU"
+              writeChan channel RoundStart
+              dispatcher channel handles gs'
+            else do
+              putStrLn "wrong guess"
+              broadcast handles $ "GUESS WRONG " ++ nameForHandle h (nameMap gameState) ++ " " ++ guess
+              dispatcher channel handles gameState
+        _      -> do 
+          putStrLn "Not currently accepting guesses"
+          dispatcher channel handles gameState
 
 broadcastTeamsAndState :: [Handle] -> GameState -> IO ()
 broadcastTeamsAndState hs g = do
@@ -192,12 +195,15 @@ cycleWord g = g { gWords = ws ++ [w] }
               
 
 cycleArtists :: Teams -> Teams
-cycleArtists ts@(Teams {team1 = t1, team2 = t2}) = ts{ team1 = cycleArtist t1, team2 = cycleArtist t2 }
+cycleArtists ts@(Teams {team1 = t1, team2 = t2}) = 
+     ts{ team1 = cycleArtist t1, team2 = cycleArtist t2 }
 
 cycleArtist :: Team -> Team
-cycleArtist t@(Team {artist=aMaybe, teamMembers=ms}) | null ms   = t
-                                                     | otherwise = let ms' = tail ms ++ [head ms]
-                                                                   in t {teamMembers = ms', artist = Just (head ms')}
+cycleArtist t@(Team {artist=aMaybe, teamMembers=ms}) 
+                      | null ms   = t
+                      | otherwise = 
+                          let ms' = tail ms ++ [head ms]
+                          in t {teamMembers = ms', artist = Just (head ms')}
 
 nameForHandle :: Handle -> HToNameMap -> String
 nameForHandle h nmap = escapeHTML $ fromMaybe "Anonymous" (M.lookup (show h) nmap)
@@ -263,7 +269,9 @@ talkLoop h channel = do
       hClose h
       writeChan channel $ Leave h
     else do
-      let msg = escapeHTML $ BU.toString msgB -- TODO: by going via String we'll unfortunately kill any invalid chars, where we'd prefer to leave the msg untouched.
+      -- TODO: by going via String we'll unfortunately kill any invalid chars, 
+      -- where we'd prefer to leave the msg untouched.
+      let msg = escapeHTML $ BU.toString msgB
       let ev | "NICK: "  `isPrefixOf` msg = SetNick h $ nickFromMsg msg
              | "GUESS: " `isPrefixOf` msg = guessFromMsg h msg
              | "DRAW: " `isPrefixOf` msg = Draw h (drop (length "DRAW: ") msg)

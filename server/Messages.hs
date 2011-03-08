@@ -24,7 +24,8 @@ data TeamMsg = TeamMsg { teamId :: Integer,
 
 -- TODO ensure this makes safe json, and safe simple html
 teamsMsgToJSON :: Teams -> HToNameMap -> String
-teamsMsgToJSON tms nMap = let tm = TeamsMsg [ makeTeamMsg (team1 tms) 0 nMap, makeTeamMsg (team2 tms) 1 nMap ]
+teamsMsgToJSON tms nMap = let tm = TeamsMsg [ makeTeamMsg (team1 tms) 0 nMap, 
+                                              makeTeamMsg (team2 tms) 1 nMap ]
                           in encode $ toJSON tm
 
 makeTeamMsg :: Team -> Integer -> HToNameMap -> TeamMsg
