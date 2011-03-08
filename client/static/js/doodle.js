@@ -7,6 +7,8 @@
        As a guesser, the player must guess at what the artist is drawing, 
        as it appears on his screen, before the other team do the same.
 
+    Authors: Neill Bogie, Andrew Mason
+
     Credits: 
         Based heavily upon v0.2 of Tiny Doodle http://tinydoodle.com/
         by Andrew Mason (a.w.mason at gmail dot com) http://analoguesignal.com/
@@ -35,7 +37,8 @@
 $(document).ready(function () {
 
     var savedServer =  window.localStorage.getItem('serverAddr');
-    var serverURL = 'ws://localhost:12345';
+    var host = "184.106.119.133";
+    var serverURL = 'ws://' + host + ':12345';
     var enableServerChanges = false;
     if (enableServerChanges && savedServer != null) {
       serverURL = savedServer;
@@ -84,6 +87,8 @@ $(document).ready(function () {
     } else if ("ROUNDSTART" == event.data ) {
       console.log("Round starts!");
       doodle.clearCanvas();
+    } else if ((/^CORRECT_GUESS_BY_YOU$/).test(event.data) ) {
+      console.log("Server says this client's guess was correct.  Cue fireworks.");
     } else if ((/^ROLE /).test(event.data) ) {
       console.log("Role received: " + event.data);
       parts = event.data.split(" ");
@@ -112,13 +117,17 @@ $(document).ready(function () {
 updateTeams = function(teamsData) {
   $('#team0list').empty();
   $('#team1list').empty();
+  console.log("in update Teams");
   for (var tix = 0; tix < teamsData.mteams.length; tix++) {
     var t = teamsData.mteams[tix];
     var sel = '#team'+t.teamId+'score';
     $(sel).html(""+t.mscore);
     for (var pix = 0; pix < t.members.length; pix++) {
       var p = t.members[pix];
-      $('#team'+t.teamId+'list').append("<li>"+p+"</li>"); //TODO: security
+      console.log("name: "+ p + " artist name " + t.martist);
+      var isArtist = p==t.martist;
+      var cl = isArtist ? "artist" : "";
+      $('#team'+t.teamId+'list').append("<li class='"+ cl +"'>"+p+"</li>");
     }
   }
 }
