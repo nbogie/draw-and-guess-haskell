@@ -9,8 +9,8 @@ import Control.Monad (forever)
 import Control.Concurrent (forkIO)
 
 import Control.Concurrent.Chan
-import Data.Maybe (mapMaybe, fromMaybe)
-import Data.List (delete, isPrefixOf,(\\))
+import Data.Maybe (fromMaybe)
+import Data.List (delete, isPrefixOf)
 import qualified Data.Map as M
 import Types
 import Teams
@@ -41,11 +41,11 @@ welcome :: Handle -> Chan Event -> IO ()
 welcome h channel = do
   request <- shakeHands h
   case request of
-    Left err -> print $ "ERR: " ++ show err
+    Left err -> print $ "ERROR: " ++ show err
     Right  _ -> do
       writeChan channel $ Join h
-      putFrame h (BU.fromString ("hello you are handle "++show h))
-      putStrLn $ "Shook hands with "++show h ++" sent welcome message."
+      sendOne h "WELCOME"
+      putStrLn $ "Shook hands with "++show h ++" and sent welcome message."
       talkLoop h channel
 
 -- Talks to the client (by echoing messages back) until EOF.
@@ -101,13 +101,14 @@ dispatcher channel gameState = do
 -------------------------------------------------------------------------------
 handleJoin :: Handle -> Chan Event -> GameState -> IO GameState
 handleJoin h ch gameState = 
-      if h `elem` (handles gameState) -- ignore this re-join from same handle, or better still, drop the handle.
+      if h `elem` handles gameState
         then
+          -- ignore this re-join from same handle (or drop the handle?)
           do putStrLn "ignoring join because handle contains already"
              return gameState
         else do
           let newTeams = addToTeams (teams gameState) h
-          let gs' = gameState {teams = newTeams, handles = h:(handles gameState)} 
+          let gs' = gameState {teams = newTeams, handles = h:handles gameState} 
           putStrLn $ "New Teams: " ++ show (teams gs')
           broadcastTeamsAndState (handles gs') gs'
           if (playState gs' == AwaitingPlayers) && length (handles gs') > 1
@@ -142,6 +143,8 @@ handleDraw h msg ch gameState = do
         Nothing -> return () 
       return gameState
 
+-- TODO: this needn't be an event at all
+-- just invoke the work directly when a round start is needed.
 handleRoundStart ch gameState = 
       case playState gameState of
         ReadyToStart -> do
@@ -192,8 +195,8 @@ processCorrectGuess gs guesserH =
 -- broadcast escapes html chars first.  if you don't want this, write broadcastRaw.
 -- broadcast :: [Handle] -> String -> IO ()
 -- TODO: handle case that the handle is closed (putFrame to a closed handle will kill the thread).
-broadcast handles msg = mapM_ (\h -> sendOne h msg) handles 
-broadcastRaw handles msg = mapM_ (\h -> sendOneRaw h msg) handles 
+broadcast hs msg = mapM_ (\h -> sendOne h msg) hs 
+broadcastRaw hs msg = mapM_ (\h -> sendOneRaw h msg) hs 
 
 -- sendOne escapes html chars first.  if you don't want this, write broadcastRaw.
 sendOne :: Handle -> String -> IO ()
