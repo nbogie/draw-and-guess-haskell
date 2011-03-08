@@ -61,13 +61,15 @@ talkLoop h channel = do
       -- TODO: by going via String we'll unfortunately kill any invalid chars, 
       -- where we'd prefer to leave the msg untouched.
       let msg = escapeHTML $ BU.toString msgB
-      let ev | "NICK: "  `isPrefixOf` msg = SetNick h $ nickFromMsg msg
-             | "GUESS: " `isPrefixOf` msg = guessFromMsg h msg
-             | "DRAW: " `isPrefixOf` msg = Draw h (drop (length "DRAW: ") msg)
-             | otherwise                  = Message h msg
+      let ev | "NICK: "  `isPrefixOf` msg = Just $ SetNick h $ nickFromMsg msg
+             | "GUESS: " `isPrefixOf` msg = Just $ guessFromMsg h msg
+             | "DRAW: " `isPrefixOf` msg = Just $ Draw h (drop (length "DRAW: ") msg)
+             | otherwise                  = Nothing
       putStrLn $ "talkLoop: got message " ++ msg ++ " parsed as: "++show ev
-      writeChan channel ev
-      putFrame h $ BU.fromString "ok"
+      case ev of
+        Just e -> do writeChan channel e
+                     sendOne h "ok"
+        Nothing -> return ()
       talkLoop h channel
 
 guessFromMsg h msg = let raw = drop (length "GUESS: ") msg
