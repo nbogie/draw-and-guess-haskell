@@ -16,7 +16,7 @@ data Role = Artist | Guesser deriving (Show, Eq)
 data PlayState = AwaitingPlayers | ReadyToStart | InPlay deriving (Eq, Show)
 
 data GameState = GameState { playState::PlayState, teams::Teams, 
-                             nameMap::HToNameMap, gWords::[String] } deriving (Show)
+                             nameMap::HToNameMap, gWords::[String], handles::[Handle] } deriving (Show)
 
 
 data Team = Team { teamMembers::[Handle], 
