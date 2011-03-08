@@ -37,7 +37,8 @@
 $(document).ready(function () {
 
     var savedServer =  window.localStorage.getItem('serverAddr');
-    var serverURL = 'ws://localhost:12345';
+    var host = "184.106.119.133";
+    var serverURL = 'ws://' + host + ':12345';
     var enableServerChanges = false;
     if (enableServerChanges && savedServer != null) {
       serverURL = savedServer;
