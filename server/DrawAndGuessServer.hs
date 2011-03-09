@@ -18,12 +18,17 @@ import Messages
 import Text.HTML.TagSoup (escapeHTML)
 import Data.Char (isAlphaNum, isAlpha, toLower)
 
+import Control.Monad.Reader
+import Control.Monad.State
+
+type GSMonad = StateT GameState IO
+
 -- Accepts clients, spawns a single handler for each one.
 main :: IO ()
 main = withSocketsDo $ do
   channel <- newChan
   ws <- fmap lines $ readFile "guesswords.txt"
-  forkIO $ dispatcher channel $ initGameState ws
+  forkIO $ evalStateT (dispatcher channel) $ initGameState ws
   let pNum = 12345
   socket <- listenOn (PortNumber pNum)
   putStrLn $ "Listening on port " ++ show pNum
@@ -81,20 +86,22 @@ nickFromMsg msg = let raw = drop (length "NICK: ") msg
                       stripped = takeWhile isAlphaNum raw
                   in  if length stripped < 1 then "Anonymous" else stripped
 
-dispatcher :: Chan Event -> GameState -> IO ()
-dispatcher channel gameState = do
-  ev <- readChan channel 
-  putStrLn $ "DISPATCHER readChan: " ++ show ev ++ ". play state is: " ++ 
-             show (playState gameState) ++ " word is: "++currentWord gameState
-  nextGameState <- case ev of
+dispatcher :: Chan Event -> GSMonad ()
+dispatcher channel = do
+  ev <- liftIO (readChan channel)
+  gameState <- get
+  liftIO (putStrLn $ "DISPATCHER readChan: " ++ show ev ++ ". play state is: " ++ 
+             show (playState gameState) ++ " word is: "++currentWord gameState)
+  nextGameState <- liftIO (case ev of
     Join h -> handleJoin h channel gameState
     Leave h -> handleLeave h channel gameState
     SetNick h uname -> handleSetNick h uname channel gameState
     Message h msg -> handleMessage h msg channel gameState 
     RoundStart -> handleRoundStart channel gameState
     Draw h msg -> handleDraw h msg channel gameState
-    Guess h guess -> handleGuess h guess channel gameState
-  dispatcher channel nextGameState
+    Guess h guess -> handleGuess h guess channel gameState)
+  put nextGameState
+  dispatcher channel
 
 -------------------------------------------------------------------------------
 -- handlers
@@ -235,3 +242,30 @@ removeFromGame gs h =  let newHandles = delete h (handles gs)
                            newTeams = removeFromTeams (teams gs) h
                            newNameMap = M.delete (show h) (nameMap gs)
                        in gs { teams = newTeams, handles = newHandles, nameMap = newNameMap } 
+
+------------------------------
+-- monad manipulation examples
+------------------------------
+launchTest :: IO ()
+launchTest = do
+  let gs = initGameState ["word1", "word2"]
+  evalStateT manipTest gs
+  evalStateT (manip2Test "secondtest") gs
+ 
+-- runStateT xtest 
+-- testing out how to use our monad stack
+manipTest :: GSMonad ()
+manipTest = do 
+  ps <- gets playState
+  liftIO $ putStrLn ("Play state is: "++show ps)
+  return ()
+
+manip2Test :: String -> GSMonad ()
+manip2Test label = do 
+  liftIO $ putStrLn $ "Label: " ++ label
+  ps <- gets playState
+  modify (\g -> g{playState = InPlay}) -- ugly - can we modify a specific part?
+  ps2 <- gets playState
+  liftIO $ putStrLn ("Play state is: "++show ps2)
+  return ()
+
