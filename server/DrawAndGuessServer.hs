@@ -114,7 +114,7 @@ handleJoin h ch gameState =
           do putStrLn "ignoring join because handle contains already"
              return gameState
         else do
-          let newTeams = addToTeams (teams gameState) h
+          let newTeams = addToTeams h (teams gameState)
           let gs' = gameState {teams = newTeams, handles = h:handles gameState} 
           putStrLn $ "New Teams: " ++ show (teams gs')
           broadcastTeamsAndState (handles gs') gs'
@@ -269,3 +269,25 @@ manip2Test label = do
   liftIO $ putStrLn ("Play state is: "++show ps2)
   return ()
 
+-- A first attempt at converting handleJoin to use the GSMonad
+-- it works but it's extremely ugly.  Left for learning purposes.
+handleJoinUgly :: Handle -> Chan Event -> GSMonad ()
+handleJoinUgly h ch = do
+      hs <- gets handles
+      if elem h hs
+        then
+          -- ignore this re-join from same handle (or drop the handle?)
+          liftIO $ putStrLn "ignoring join because handle contains already"
+        else do
+          newTeams <- fmap (addToTeams h) (gets teams) 
+          modify (\g -> g{teams = newTeams, handles = h:hs})
+          gets teams >>= (\ts -> liftIO $ putStrLn $ "New Teams: " ++ show ts)
+
+          get >>= (\g -> liftIO $ broadcastTeamsAndState hs g)
+
+          ps <- gets playState
+          if (ps == AwaitingPlayers) && length hs > 1
+                      then do 
+                        liftIO $ writeChan ch RoundStart
+                        modify (\g -> g{playState = ReadyToStart})
+                      else return ()

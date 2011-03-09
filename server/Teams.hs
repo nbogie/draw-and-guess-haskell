@@ -29,18 +29,18 @@ guessers gs =
       allMembers = concatMap teamMembers [t1,t2]
   in  allMembers \\ artists gs
 
-addToTeams :: Teams -> Handle -> Teams
-addToTeams nowTeams@(Teams {team1=t1, team2=t2}) h = 
+addToTeams :: Handle -> Teams -> Teams
+addToTeams h nowTeams@(Teams {team1=t1, team2=t2}) = 
   let l1 = length (teamMembers t1)
       l2 = length (teamMembers t2)
   -- We want p2 to join on same team as p1 to get play going fast.  
   -- Assignment will alternate thereafter.
   in if l1+l2 < 2 || l1 < l2  
-       then nowTeams { team1 = addToTeam t1 h }
-       else nowTeams { team2 = addToTeam t2 h }
+       then nowTeams { team1 = addToTeam h t1 }
+       else nowTeams { team2 = addToTeam h t2 }
 
-addToTeam :: Team -> Handle -> Team
-addToTeam t h = let ms = teamMembers t
+addToTeam :: Handle -> Team -> Team
+addToTeam h t = let ms = teamMembers t
                 in t {teamMembers = ms++[h], -- new joiners are last to draw
                       artist=Just (fromMaybe h (artist t))}
 
